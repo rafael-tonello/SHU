@@ -1,0 +1,15 @@
+#Note: Docker compose up may have problems when project is located in a path with spaces or mounted volumes. 
+#In those cases, you can move the project to a path without spaces, move your project to a full local path, or
+#use the command 'hotreload_with_no_compose.sh' from ./devtools folder. 
+#
+#hotreload_with_no_compose.sh do not use docker or podman compose and use directly the docker/podman commands.
+services:
+    hotreload:
+        build: .
+        image: shu-cli-dev
+        volumes:
+            - type:  bind
+              source: ./src
+              target: /opt/src
+        command: >
+            bash -c '/usr/bin/shhotreload.sh "/opt/src/shu-cli.test.sh" "clear" "" "/opt/src/shu-cli.sh"'
