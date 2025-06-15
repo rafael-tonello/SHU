@@ -1,9 +1,33 @@
 #!/bin/bash
 
-ERROR_AREADY_DONE="already done"
-ERROR_NO_SHU_DIRECTORY="is not shu project/directory. No shu.yaml found"
+SHU_VERSION="0.0.0"
+shu_scriptFullPath="$(realpath "$0")"
+shu_scriptDir="$(dirname "$shu_scriptFullPath")"
 
-shu.main(){ local cmd="$1"; shift
+
+
+#Common errors
+    ERROR_AREADY_DONE="already done"
+    ERROR_NO_SHU_DIRECTORY="is not shu project/directory. No shu.yaml found"
+    ERROR_INDEX_OUT_OF_BOUNDS="index out of bounds"
+#}
+
+#shu values that can be overridden by environment variables {
+    if [ -z "$SHU_GIT_REPO" ]; then SHU_GIT_REPO="https://github.com/rafael-tonello/SHU.git"; fi
+    if [ -z "$SHU_COMMON_FOLDER_SOURCE" ]; then SHU_COMMON_FOLDER_SOURCE="$SHU_GIT_REPO#src/libs/shu-common"; fi
+#}
+
+shu.main(){ local cmd="$1";
+
+    if [[ "$cmd" == "-h" || "$cmd" == "--help"  || $# -eq 0 ]]; then
+        shu.Help
+        return 0
+    elif [[ "$cmd" == "-v" || "$cmd" == "--version" ]]; then
+        echo "Shu CLI version $SHU_VERSION"
+        return 0
+    fi
+    shift;
+
     shu.checkPrerequisites
     if [ "$_error" != "" ]; then
         shu.printError "Shu error: $_error"
@@ -11,13 +35,56 @@ shu.main(){ local cmd="$1"; shift
     fi
 
     local capitalizedCmd=$(echo "$cmd" | awk '{print toupper(substr($0,0,1)) substr($0,2)}')
-    shu.$capitalizedCmd "$@"
-
-    #if $_error is not empty or return code is not 0, print error message
-    if [ "$?" -ne 0 ] || [ "$_error" != "" ]; then
-        shu.printError "Shu error: $_error"
-        return 1
+    _error=""
+    
+    #check if project contains the command
+    shu.Pcommandexists "$cmd"; local exists="$_r"
+    if [ "$exists" == "true" ]; then
+        #run the command from the project
+        shu.Pcommandrun "$cmd" "$@"; local retCode=$?
+        if [ "$_error" != "" ]; then
+            shu.printError "Shu error: $_error"
+        fi 
+        return $retCode
     fi
+
+    local retCode=0
+    #check if lowercase of capitalizedCmd contains 'Run' or 'run' (do not supress stderr when running scripts using shu)
+    if [[ "$capitalizedCmd" == *"Run"* ]]; then
+        shu.Run "$@"
+        retCode=$?
+    elif type "shu.$capitalizedCmd" &> /dev/null; then
+        shu.$capitalizedCmd "$@"
+        retCode=$?
+
+        if [ "$_error" != "" ]; then
+            shu.printError "Shu error: $_error"
+        fi
+        return $retCode
+    else
+        #check if the folder $shu_scriptFullPath/.shu/packages/shu-common/commands/$cmd.sh exists
+        local commandFile="$shu_scriptDir/commands/$cmd.sh"
+        if [ -f "$commandFile" ]; then
+            #run the command file
+            source "$commandFile" "$@"
+            retCode=$?
+            if [ "$retCode" -ne 0 ]; then
+                if  [ -f /tmp/shu_error.log ]; then
+                    _error="$_error. $(cat /tmp/shu_error.log)"
+                fi
+
+                shu.printError "Shu error: Error running command '$cmd': $_error"
+                rm -f /tmp/shu_error.log
+            fi
+            rm -f /tmp/shu_error.log
+            return $retCode
+        else
+            shu.printError "Command '$cmd' not found in your project, nor in the SHU commands. User 'shu pcommand --help' to see the available project commands, or 'shu --help' to see the available SHU commands."
+            retCode=1
+        fi
+
+    fi
+    
     return 0
 }
 
@@ -35,6 +102,11 @@ shu.checkPrerequisites(){
         return 1
     fi
 
+    if ! command -v split &> /dev/null; then
+        _error="split is not installed. Please install split to use Shu."
+        return 1
+    fi
+
     ##check if jq is installed
     #if ! command -v jq &> /dev/null; then
     #    _error="jq is not installed. Please install jq to use Shu."
@@ -46,6 +118,13 @@ shu.checkPrerequisites(){
 
 shu.printRed(){ local message="$1"; local keepOpened="${2:-}"
     printf "\033[0;31m$message"
+    if [ "$keepOpened" != "true" ]; then
+        printf "\033[0m"
+    fi
+}
+
+shu.printGreen(){ local message="$1"; local keepOpened="${2:-}"
+    printf "\033[0;32m$message"
     if [ "$keepOpened" != "true" ]; then
         printf "\033[0m"
     fi
@@ -83,243 +162,253 @@ shu.printError(){
     shu.printRed "$ret"$'\n' > /dev/stderr
 }
 
+shu.getShuProjectRoot_relative(){
+    #look for a .shu folder in the current directory (director of script that called misc.Import). If not found, look in the parent, and so on
+    local shuLocation="./"
+    while [ ! -d "$shuLocation/.shu" ] && [ "$shuLocation" != "/" ]; do
+        shuLocation+="../"
+        local realpath="$(realpath "$shuLocation")"
+
+        if [ "$realpath" == "/" ]; then
+            shuLocation="/"
+            break
+        fi
+    done
+
+    if [ ! -d "$shuLocation/.shu" ]; then
+        _error="Could not find .shu folder in the current directory or any parent directory"
+        return 1
+    fi
+
+    _r="$shuLocation"
+    return 0
+}
+
+
+#return _r with a text that can be printed to the console. The line length is 
+#defined by tput cols, or 80 if tput is not available.
+#_print ($2) can be used to control if the line should be printed or not. The
+#default behavior is to print the line (_print = true).
+shu.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
+    local _length=$(tput cols 2>/dev/null || echo 80)
+    if [ -z "$_length" ] || [ "$_length" -le 0 ]; then
+        _length=80
+    fi
+
+    _r=$(printf "%${_length}s" | tr ' ' "$_char")
+    if [ "$_print" == "true" ]; then
+        printf "%s\n" "$_r"
+    fi
+    return 0
+}
+
+#TODO: move files 
 #Shu-cli direct commands (commands with no sub-cli) {
     #Initialize a new Shu project in the current directory by creating a shu.yaml file.
     shu.Init(){ local projectName=${1:-$(basename "$(pwd)")}
-        shu.initFolder "$projectName"
+        if [ -f "./shu.yaml" ]; then
+            _error="this directory is already a Shu project."
+            return 1
+        fi
 
-        #TODO: clone miscellaneous to ./shu/packages/shu-misc
+        shu.initFolder "$projectName"
+        shu.main touch "$projectName.sh"
+        shu.main mainfiles add "$projectName.sh"
+
+        #TODO: clone miscellaneous to ./shu/packages/shu-common
         #TODO: create main.sh file
-        #TODO: add 'source ./shu/packages/shu-misc/shu-shu.sh' to the main file
+        #TODO: add 'source ./shu/packages/shu-common/shu-shu.sh' to the main file
 
         echo "Initialized Shu project '$projectName'."
     }
 
     #deletes the .shu folder
     shu.Clean(){
-        shu.Depclean
+        shu.main dep clean $@
     }
 
     #restore all dependencies from shu.yaml. If .shu folder already exists, the process is aborted
     shu.Restore(){
-        shu.Deprestore
+        #send arguments, bcause shu.Deprestore may need them
+        shu.main dep restore $@
+
+        #do not need to check Cmddeps, because shu.Deprestore already does it
     }
 
     #deletes .shu folder and restores it ('runs shu clean' and 'shu restore')
     shu.Refresh(){
-        shu.Clean
-        shu.Restore
+        shu.main dep clean
+        shu.main dep restore
     }
 
-    #you can specify partes of path to prevent colision with other scripts names
-    #
-    #Note: this function will find any script in the ./shu/packages/ folder, not only the ones in the main section of shu.yaml.
-    #Note: All found scripts will be run, so if you have multiple scripts with the same name in different packages, they will all be run.
-    shu.Runtool(){ local scriptName="$1"; shift
-        if [ "$scriptName" == "" ]; then
-            _error="No script name provided. Please provide a script name to run."
-            return 1
-        fi
-
-        #find the '$scriptName' and '$scriptName.sh' in all .shu/packages/
-        local foundScripts=$(find .shu/packages/ -type f \( -name "$scriptName" -o -name "$scriptName.sh" \) -executable)
-        
-        if [ "$foundScripts" == "" ]; then
-            _error="Script '$scriptName' not found in any package."
-            return 1
-        fi
-
-        for script in $foundScripts; do
-            #check if script is executable
-            if [ ! -x "$script" ]; then
-                continue
-            fi
-
-            shu.runScript "$script" "$@"
-            if [ "$_error" != "" ]; then
-                shu.printError "error running script '$script': $_error"
-                return 1
-            fi
-        done
-    }
-
-    shu.Test(){
-        #check if argCount is 0
-
-        if [ "$#" -eq 0 ]; then
-            shu.runFolderTests "./"
-        else
-            files=();
-            folders=();
-            recursive=false;
-            for arg in "$@"; do
-                if [[ "$arg" == "-r" || "$arg" == "--recursive" ]]; then
-                    recursive=true;
-                elif [ -d "$arg" ]; then
-                    folders+=("$arg");
-                elif [[ "$1" == *".test."* ]]; then
-                    files+=("$arg");
-                else
-                    #check if the file exists
-                    if [ -f "$arg" ]; then
-                        local lastDotIndex=$(expr index "$1" .)
-                        local fName="${1:0:lastDotIndex-1}"
-                        local fExt="${1:lastDotIndex}"
-                        fName=$fName".test"$fExt
-                        if [ -f "$fName" ]; then
-                            files+=("$fName");
-                        else
-                            shu.printError "Test file for '$arg' ($fName) not found"
-                        fi 
-                    else
-                        shu.printError "tests for '$arg' not found"
-                    fi
-                fi
-            done
-
-            for file in "${files[@]}"; do
-                shu.runTestFile "$file"
-                if [ "$_error" != "" ]; then
-                    shu.printError "Error running test file '$file': $_error"
-                    return 1
-                fi
-            done
-
-            for folder in "${folders[@]}"; do
-                shu.runFolderTests "$folder" "$recursive"
-                if [ "$_error" != "" ]; then
-                    shu.printError "Error running tests in folder '$folder': $_error"
-                    return 1
-                fi
-            done
-        fi
-
+    shu.Tests(){
+        shu.main test "$@"
+        return  $?
     }
 
     shu.Help(){
-        echo "Shu CLI - A package manager for shellscripting"
-        echo "Usage: shu <command> [options]"
-        echo "Commands:"
-        echo "  init [projectName]   Initialize a new Shu project in the current directory."
-        echo "  get <url>            Get a package from a URL and add it to the project."
-        echo "  restore              Restore all dependencies from shu.yaml."
-        echo "  clean                Remove the .shu folder and all installed packages."
-        echo "  refresh              Clean and restore all dependencies from shu.yaml."
-        echo "  setmain <scriptName> Set a script as the main script for the project."
-        echo "  run [scriptName]     Run the main script or a specific script."
-        echo "  install <url>        Install a package from a URL."
-        echo "  uninstall <packageOrCommandName> "
-        echo "                       Uninstall a package or command."
-        echo "  runtool <scriptName> Find scripts named <scriptName> in ./shu/packages/ and run them."
-        echo ""
-        echo "Additional information: Virtually, shu can install any git repository to you project."
+        local output=""
+        #just reduce the lines above
+        helpItem(){ output+=$(shu.printHelpLine "$1"); }
+
+        helpItem "Shu CLI version $SHU_VERSION - A package manager for shellscripting.\n"
+        helpItem "Usage:\n"
+        helpItem "  1) shu <command> [options]\n"
+        helpItem "\n"
+        helpItem "Commands:\n"
+        helpItem "  init [projectName]       - Initialize a new Shu project in the current directory.\n"
+        helpItem "  touch <scriptName>...    - Create a new .sh file with a basic structure.\n"
+        helpItem "  get <urls>...            - Get one or more packages from Git URL and add it to the project. redirects to 'shu dep get <url>' (see int the 'dep' subcommand).\n"
+        helpItem "  clean                    - Remove the .shu folder and all installed packages.\n"
+        helpItem "  restore                  - Restore all dependencies from shu.yaml.\n"
+        helpItem "  refresh                  - Clean and restore all dependencies from shu.yaml.\n"
+        helpItem "  setmain <scriptName>     - Set a script as the main script for the project.\n"
+        helpItem "  run [scriptName]         - Run the main script or a specific script.\n"
+        helpItem "  install <url>            - Install a package from a URL to your system. Note that this command will install to be executed in your system, and not in your project. It is used to install projects written with SHU. Redirects to 'shu installer install'\n"
+        helpItem "  uninstall <packageOrCommandName>\n"
+        helpItem "                           - Uninstall a package or command from your sytem. Note that this command will not operate in your project, but in packages installed in your system via 'shu install'. Redirects to 'shu installer uninstall'\n"
+
+        #list files in 'commands folder
+        files="$(find "$(dirname "$shu_scriptFullPath")/commands" -type f -name "*.sh" )"
+        for file in $files; do
+            #helpItem "\n"
+            while IFS= read -r line; do
+                helpItem "  $line\n"
+            done < <(source "$file" --help)
+        done
+        
+        
+        helpItem "\n\nAdditional information: Virtually, shu can install any git repository to you project.\n"
+
+        printf "$output"
+
+    }
+
+    #uses tput to get the size of the terminal and prints a help line with the given text.
+    #if line is to long, it will be split and idented.
+    #Identation position is calculated by finding the last sequence of two spaces in the line.
+    shu.printHelpLine(){ local line="$1"
+        #find the '|-' sequence in the line
+        #optional |- sequence (remove from final string)
+        local sub="|-"
+        local identPos=$(( $(expr match "$line" ".*${sub}") - ${#sub} ))
+        if [ "$identPos" -gt 1 ]; then
+            line="${line/$sub/}"
+        else
+            sub="- "
+            identPos=$(( $(expr match "$line" ".*${sub}") - ${#sub} ))
+        fi
+
+        identPos=$((identPos + 2))
+        local terminalWidth=$(tput cols)
+        local identSpaces="$(printf "%${identPos}s" " ")"
+        local maxSizeOfPrintedLines=$((terminalWidth - identPos))
+
+        if [ "$terminalWidth" -le $identPos ]; then
+            #if terminal width is less than identPos, just print the line
+            echo "$line"
+            return 0
+        fi
+
+        #remove the $sub from the line
+        #line="${line/$sub/}"
+
+        local sizeOfNextPrint=$terminalWidth;
+        local printIdent=false;
+        
+        local result=""
+        while true; do
+
+            #check if line is empty
+            if [ -z "$line" ]; then
+                break
+            fi
+
+            
+            while true; do
+                #get character at position $sizeOfNextPrint
+                local char="${line:$sizeOfNextPrint:1}"
+                if [[ "$char" == "" || "$char" == " " ]]; then
+                    #line was no spaces untils the $sizeOfNextPrint position
+                    break
+                fi
+                sizeOfNextPrint=$((sizeOfNextPrint - 1))
+            done
+            local toPrint="${line:0:$sizeOfNextPrint}"
+            line="${line:$sizeOfNextPrint}"
+
+            if $printIdent; then
+                printf "$identSpaces"
+            fi
+
+            echo "$toPrint"
+
+            printIdent=true
+            sizeOfNextPrint=$maxSizeOfPrintedLines
+        done
+
+
+    }
+
+    _shu_autocomplete() {
+        local cur prev
+        COMPREPLY=()
+
+        local cmds=""
+
+        if [[ $COMP_CWORD -eq 1 ]]; then
+            files="$(find "$SHU_PATH/commands" -type f -name "*.sh" )"
+            for f in $files; do
+                local cmdName=$(basename "$f" .sh)
+                if [[ "$cmdName" != "shu-cli" && "$cmdName" != "shu-common" ]]; then
+                    cmds+="$cmdName "
+                fi
+            done
+            cmds="init get clean restore refresh setmain run install uninstall help $cmds"
+            
+
+            #list functions shu.* with capitalized name after shu.
+        elif [[ $COMP_CWORD -eq 2 ]]; then
+            local possibleFile="$SHU_PATH/commands/${COMP_WORDS[1]}.sh"
+            if [ -f "$possibleFile" ]; then
+                _r=""
+                source "$possibleFile" "bashCompletion" "$@" 2>/dev/null
+                if [ "$_r" != "" ]; then
+                    cmds="${_r[@]}"
+                fi
+            fi
+        fi
+
+        COMPREPLY=( $(compgen -W "$cmds" -- "${COMP_WORDS[COMP_CWORD]}") )
+            
+
+
+        #cur="${COMP_WORDS[COMP_CWORD]}"
+        #prev="${COMP_WORDS[COMP_CWORD-1]}"
+#
+        #local cmds="init build deploy help"
+        #COMPREPLY=( $(compgen -W "$cmds" -- "$cur") )
     }
 
     #clone $url to ~/.local/shu/installed
     #create a symlink for each script in the main section of shu.yaml to ~/.local/shu/bin
     #changes .bashrc to add ~/.local/shu/bin to PATH if not already present
     #add ~/.local/shu/bin to PATH if not already present
-    shu.Install(){ local url="$1"; shift
-        mkdir -p $HOME/.local/shu/installed
-        mkdir -p $HOME/.local/shu/bin
-
-        restoreDep $url "$HOME/.local/shu/installed"; local destination="$_r"
-        if [ "$_error" != "" ]; then
-            shu.Uninstall "$(basename "$destination")"
-            _error="error installing package: $_error"
-            return 1
-        fi
-
-        cd "$destination"
-        if [ ! -f "shu.yaml" ]; then
-            shu.Uninstall "$(basename "$destination")"
-            _error="shu.yaml file not found in the destination directory"
-            return 1
-        fi
-
-        shu.yaml.getArray "shu.yaml" ".main[]"; local mainScripts=("$_r")
-        if [ "$mainScriptList" == "" ]; then
-            shu.Uninstall "$(basename "$destination")"
-            _error="No main scripts found in shu.yaml. Please add scripts to the main section."
-            return 1
-        fi
-
-        for script in $mainScriptList; do
-            if [ ! -f "$script" ]; then
-                shu.printError "error installing command for script '$script'. Script not found in the package. Please check the main section of shu.yaml."
-                return 1
-            fi
-            
-            #make script executable
-            chmod +x "$script"
-            
-            #remove extension from script name
-            local scriptNameWithoutExt="${script%.*}"
-
-            #create symlink in ~/.local/shu/bin
-            ln -sf "$destination/$script" "$HOME/.local/shu/bin/$scriptNameWithoutExt"
-
-            echo "Installed command '$scriptNameWithoutExt' from package $(basename "$destination")"
-        done
-
-        #add ~/.local/shu/bin to PATH if not already present
-        if ! grep -q "$HOME/.local/shu/bin" "$HOME/.bashrc"; then
-            echo "export PATH=\"\$PATH:$HOME/.local/shu/bin\"" >> "$HOME/.bashrc"
-            echo "Added ~/.local/shu/bin to PATH in ~/.bashrc"
-            source "$HOME/.bashrc"
-        fi
-        if ! grep -q "$HOME/.local/shu/bin" "$HOME/.profile"; then
-            echo "export PATH=\"\$PATH:$HOME/.local/shu/bin\"" >> "$HOME/.profile"
-            echo "Added ~/.local/shu/bin to PATH in ~/.profile"
-            source "$HOME/.profile"
-        fi
-        _error=""
+    shu.Install(){
+        shu.main installer install "$@"
     }
 
-    shu.Uninstall(){ local packageOrCommandName="$1"
-        shu.getPackagePath "$packageOrCommandName"; local packagePath="$_r"
-        if [ "$_error" != "" ]; then
-            _error="error unistalling a package: $_error"
-            return 1
-        fi
-
-        #ask for confirmation
-        read -p "Are you sure you want to uninstall '$(basename "$packagePath")'? [y/N]: " confirm
-        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-            echo "Uninstall cancelled."
-            return 0
-        fi
-
-        cd "$packagePath"
-        #get the main scripts from shu.yaml
-
-        shu.yaml.getArray "shu.yaml" ".main[]"; local mainScriptList="$_r"
-        for script in $mainScriptList; do
-            #remove symlink from ~/.local/shu/bin
-            local scriptNameWithoutExt="${script%.*}"
-            if [ -L "$HOME/.local/shu/bin/$scriptNameWithoutExt" ]; then
-                rm "$HOME/.local/shu/bin/$scriptNameWithoutExt"
-                echo "Removed command '$scriptNameWithoutExt' from ~/.local/shu/bin"
-            else
-                echo "Command '$scriptNameWithoutExt' not found in ~/.local/shu/bin"
-            fi
-        done
-
-        #remove the package directory
-        if [ -d "$packagePath" ]; then
-            rm -rf "$packagePath"
-            echo "Removed package '$packagePath'"
-        else
-            _error="package '$packagePath' not found"
-        fi
-
+    shu.Uninstall(){
+        shu.main installer uninstall "$@"
+        return $?
     }
 
-    shu.Setmain(){ shu.mainFileAdd "$@"; } #alias for shu.mainFileAdd
+    shu.Setmain(){ shu.main mainfiles "$@"; return $?; } #alias for shu.mainFileAdd
 
-    shu.Run(){ shu.Mainfilerun "$@"; } #alias for shu.mainFileRun
+    shu.Run(){ shu.main mainfiles "$@"; return $?; } #alias for shu.mainFileRun
 
-    shu.Get(){ shu.Depget "$@"; } #alias for shu.DepGet
+    shu.Get(){ shu.main dep get "$@"; return $?; } #alias for shu.main dep get
+
 
     #internal (private) functions {
         shu.initFolder(){
@@ -329,507 +418,241 @@ shu.printError(){
             mkdir -p .shu
 
             if  [ ! -f "shu.yaml" ]; then
-                echo "name: \"$projectName\"" > shu.yaml
-                echo "main: " >> shu.yaml
-                echo "deps: " >> shu.yaml
-
+                cp "$(dirname "$shu_scriptFullPath")/assets/templates/shu.yaml" ./
+                
+                shu.yaml.set "shu.yaml" ".name" "$projectName"
+                
                 #check if .gitignore exists, if not, create it
                 if [ ! -f ".gitignore" ]; then
-                    echo ".shu/" > .gitignore
+                    echo "# Shu cache and packages" > .gitignore
+                    echo ".shu/" >> .gitignore
                 else
                     #check if .shu/ is already in .gitignore
                     if ! grep -q ".shu/" ".gitignore"; then
+                        echo "# Shu cache and packages" >> .gitignore
                         echo ".shu/" >> .gitignore
                     fi
                 fi
+
+                shu.main dep get "$SHU_COMMON_FOLDER_SOURCE as shu-common" --not-recursive
             fi
         }
 
-        shu.runFolderTests(){ local directory="$1"; local _recursive=${2:-false}
-            if [ ! -d "$directory" ]; then
-                _error="Directory '$directory' not found."
-                return 1
-            fi
-
-            #find all files with .test. in the name in the directory
-            local testFiles=$(find "$directory" -type f -name "*.test.*")
-            
-            if [ "$testFiles" == "" ]; then
-                return 0
-            fi
-
-            for file in $testFiles; do
-                shu.runTestFile "$file"
-                if [ "$_error" != "" ]; then
-                    shu.printError "Error running test file '$file': $_error"
-                fi
-            done
-
-            if [ "$_recursive" == "true" ]; then
-                #find all subdirectories and run tests in them
-                local subdirs=$(find "$directory" -type d)
-                for subdir in $subdirs; do
-                    if [ "$subdir" != "$directory" ]; then
-                        shu.runFolderTests "$subdir" true
-                        if [ "$_error" != "" ]; then
-                            shu.printError "Error running tests in folder '$subdir': $_error"
-                        fi
-                    fi
-                done
-            fi
-        }
-
-        shu.runTestFile(){ local file="$1"
-            if [ ! -f "$file" ]; then
-                _error="Test file '$file' not found."
-                return 1
-            fi
-
-            #check if file is executable
-            if [ ! -x "$file" ]; then
-                _error="Test file '$file' is not executable. Please make it executable with 'chmod +x $file'."
-                return 1
-            fi
-
-            echo "----[ Running tests of file '$file' ]----"
-            #run the test file
-            "$file"
-            if [ $? -ne 0 ]; then
-                _error="Test file '$file' failed."
-                return 1
-            fi
-            _error=""
-
-        }
+        
     #}
 #}
 
-#mainfiles management sub-cli
-    shu.Mainfile(){
-        local subCmd="$1"; shift
-        case "$subCmd" in
-            "add")
-                shu.mainFileAdd "$@"
-                ;;
-            "remove")
-                shu.mainFileRemove "$@"
-                ;;
-            "list")
-                shu.mainFileList "$@"
-                ;;
-            "run")
-                shu.mainFileRun "$@"
-                ;;
-            *)
-                _error="Unknown subcommand '$subCmd' for 'shu mainfile'. Available subcommands: add, remove, list."
-                return 1
-                ;;
-        esac
-    }
-    shu.Mainfiles(){ shu.Mainfile "$@"; } #alias for shu.MainFile
+#shu project commands {
 
-    #add a script to the main section of shu.yaml
-    shu.mainFileAdd(){ local scriptName="$1"; shift
-        if [ "$scriptName" == "" ]; then
-            _error="No script name provided. Please provide a script name to set as main."
-            return 1
-        fi
+    #Add a project command.
+    #You can:
+    #   shu Pcommand add <command> <packageName/cmdFile.sh> <information>
+    #   shu Pcommand add <command1> <packageName/cmdFile1.sh> <information1> <command2> <packageName/cmdFile2.sh> <information2> ...
+    #   shu Pcommand add <command1:packageName/cmdFile1.sh:information1> <command2:packageName/cmdFile2.sh:information2> ...
+    shu.Pcommandadd(){
         shu.initFolder
-        
-        #check if script exists
-        if [ ! -f "$scriptName" ]; then
-            _error="Script '$scriptName' not found. Please provide a valid script name."
-            return 1
-        fi
-        #check if script is executable
-        if [ ! -x "$scriptName" ]; then
-            _error="Script '$scriptName' is not executable. Please make it executable with 'chmod +x $scriptName'."
-            return 1
-        fi
-        
-        #check if file is already added to the 'main' section of shu.yaml (user shu.yaml.listContains)
-        shu.yaml.listContains "shu.yaml" ".main" "$scriptName"
-        if [ "$_r" == "true" ]; then
-            _error="Script '$scriptName' is already set as main. Please provide a different script name."
-            return 1
-        fi
 
-        #add script to the main section
-        shu.yaml.append "shu.yaml" ".main" "$scriptName"
-        if [ "$_error" != "" ]; then
-            _error="Error adding script '$scriptName' to main section of shu.yaml: $_error"
-            return 1
-        fi
+        local command="$1";
+        local packageAndFile="$2"
+        local information="$3"
 
-        shu.yaml.get "shu.yaml" ".name"; local projectName="$_r"
-        echo "Script '$scriptName' set as a main script for project '$projectName'."
-        _error=""
-    }
-    
-    #runs the <scriptName>. If no script name is provided, it will run all scripts in the main section of shu.yaml.
-    shu.Mainfilerun(){ local scriptName="$1"; shift
-        shu.initFolder
-        if [ "$scriptName" != "" ]; then
-            shu.runScript "$scriptName" "$@"
-            if [ "$_error" != "" ]; then
-                shu.printError "Shu error: $_error"
-                return 1
-            fi
+        if [[ "$command" =~ ^([^:=]+)[:=](.*)$ ]]; then
+            command="${BASH_REMATCH[1]}"
+            packageAndFile="${BASH_REMATCH[2]}"
+            information="${BASH_REMATCH[3]}"
+            shift 1
         else
-            #fun all files specified in the main list of shu.yaml
-            shu.yaml.getArray "shu.yaml" ".main[]"; local mainScripts=("$_r")
-            if [ "$mainScriptList" == "" ]; then
-                _error="This project has no main scripts defined yet. User 'shu setmain <scriptName>' to set a script as main or run 'shu run <scriptName>' to run a specific script."
-                return 1
-            fi
+            shift 3
+        fi
 
-            for script in $mainScriptList; do
-                shu.runScript "$script" "$@"
-                if [ "$_error" != "" ]; then
-                    shu.printError "Shu error: $_error"
-                fi
-            done
-        fi      
 
-        _error=""  
+        shu._pcmddepadd "$command" "$packageAndFile" "$information"
+        if [ "$_error" != "" ]; then
+            _error="Error adding project command '$command': $_error"
+            return 1
+        fi
+
+        if _r="updated"; then
+            echo "Project command '$command' updated."
+        else
+            echo "Project command '$command' added to project."
+        fi
+
+        #recursive call for remain arguments
+        if [ "$#" -gt 0 ]; then
+            shu.Pcommandadd "$@"
+            if [ "$_error" != "" ]; then _error="Process aborted: $_error"; return 1; fi
+            return $?
+        fi
+
+        _r=""
+        _error=""
+        return 0    
     }
 
-    shu.mainFileRemove(){ local scriptName="$1"; shift
-        if [ "$scriptName" == "" ]; then
-            _error="No script name provided. Please provide a script name to remove from main section."
+    shu.Pcommandremove(){ local command="$1"; shift
+        if [ "$command" == "" ]; then
+            _error="No project command name provided. Please provide a command name to remove from pcmds section."
             return 1
         fi
+
         shu.initFolder
 
-        #check if script is in the main section of shu.yaml
-        shu.yaml.listContains "shu.yaml" ".main" "$scriptName"
-        if [ "$_r" == "false" ]; then
-            _error="Script '$scriptName' is not set as main. Please provide a valid script name."
+        #check if command is in the pcmds section of shu.yaml
+        shu.getPCmdDepIndex "$command"; local index="$_r"
+        if [ "$index" == "-1" ]; then
+            _error="Project command '$command' is not in the pcmds section of shu.yaml. Please provide a valid command name."
             return 1
         fi
 
-        #remove script from the main section
-        yq eval -i ".main |= del(.[] | select(. == \"$scriptName\"))" "shu.yaml"
+        #remove command from the pcmds section
+        shu.yaml.removeArrayElement "shu.yaml" ".project-commands" "$index"
         if [ "$_error" != "" ]; then
-            _error="Error removing script '$scriptName' from main section of shu.yaml: $_error"
+            _error="Error removing project command '$command' from pcmds section of shu.yaml: $_error"
             return 1
         fi
 
         shu.yaml.get "shu.yaml" ".name"; local projectName="$_r"
-        echo "Script '$scriptName' removed from main section of project '$projectName'."
+        echo "Project command '$command' removed from pcmds section of project '$projectName'."
         _error=""
+
+        #recursive call for remain arguments
+        if [ "$#" -ne 0 ]; then
+            shu.Pcommandremove "$@"
+            return $?
+        fi
     }
 
-    shu.mainFileList(){
+    shu.Pcommandlist(){
         shu.initFolder
 
-        #get all main scripts from shu.yaml
-        shu.yaml.getArray "shu.yaml" ".main[]"; local mainScripts=("$_r")
+        #get all project commands from shu.yaml
+        shu.yaml.getArray "shu.yaml" ".project-commands[]"; local pcmds=("${_r[@]}")
         if [ "$_error" != "" ]; then
-            _error="Error getting main scripts from shu.yaml: $_error"
+            _error="Error getting project commands from shu.yaml: $_error"
             return 1
         fi
 
-        if [ "${#mainScripts[@]}" -eq 0 ]; then
-            echo "No main scripts set in the project."
+        if [ "${#pcmds[@]}" -eq 0 ]; then
+            echo "No project commands found in the project."
             return 0
         fi
 
-        echo "Main scripts in the project:"
-        for script in "${mainScripts[@]}"; do
-            echo "- $script"
+        echo "Project commands:"
+        for pcmd in "${pcmds[@]}"; do
+            local cmdName=$(echo "$pcmd" | cut -d ':' -f 2)
+            local packageAndPath=$(echo "$pcmd" | cut -d ':' -f 3)
+            local information=$(echo "$pcmd" | cut -d ':' -f 4-)
+
+            echo "- $cmdName: $packageAndPath ($information)"
         done
     }
 
-    shu.runScript(){ local scriptName="$1"; shift
-        if [ -f "$scriptName" ]; then
-            #check if script is executable
-            if [ ! -x "$scriptName" ]; then
-                _error="Script '$scriptName' is not executable. Please make it executable with 'chmod +x $scriptName'."
-                return 1
-            fi
-            #run the script
-            ./"$scriptName" "$@"
-        else
-            _error="Script '$scriptName' not found."
+    shu.Pcommandexists(){ local command="$1"
+        if [ "$command" == "" ]; then
+            echo "erro 1"
+            _error="No project command name provided. Please provide a command name to check."
+            _r="false"
             return 1
         fi
-    }
-#}
 
-#dependecy management sub-cli #{
-    shu.Dep(){
-        local subCmd="$1"; shift
-        case "$subCmd" in
-            "get")
-                shu.Depget "$@"
-                ;;
-            "remove")
-                shu.Depremove "$@"
-                ;;
-            "list")
-                shu.Deplist "$@"
-                ;;
-            *)
-                _error="Unknown subcommand '$subCmd' for 'shu dep'. Available subcommands: get, restore, clean, refresh, install, uninstall."
+        #check if command is in the pcmds section of shu.yaml
+        shu.getPCmdDepIndex "$command"; local index="$_r"
+        if [ "$index" == "-1" ]; then
+            _r="false"
+            return 1
+        fi
+
+        echo 33
+
+        _r="true"
+        _error=""
+        return 0
+    }
+
+    #returns _r with 'updated' if command was updated, or empty string if command was added
+    shu._pcmddepadd(){ local command="$1"; local packageAndPath="$2"; local information="$3"
+        if [ "$command" == "" ]; then
+            _error="No project command name provided. Please provide a command name to add to cmddeps section."
+            return 1
+        fi
+
+        if [ "$packageAndPath" == "" ]; then
+            _error="No package name or path provided for project command '$command'."
+            return 1
+        fi
+
+        #check if command is already in the pcmds section of shu.yaml
+        #pcmds is a object, where the key is the command name and the value is the information about the command
+        shu.getPCmdDepIndex "$command"; local index="$_r"
+        local forceUpdate=false
+        if [ "$index" != "-1" ]; then
+            #check if there is --force or -f in the arguments
+            if [[ "$@" == *"--force"* ]] || [[ "$@" == *"-f"* ]]; then
+                shu.yaml.removeArrayElement "shu.yaml" ".project-commands" "$index"
+                if [ "$_error" != "" ]; then
+                    _error="Error updating project command '$command': $_error"
+                    return 1
+                fi
+
+                forceUpdate=true
+            else
+                _error="Project command '$command' is already set in your project. User --force to updates its information."
                 return 1
-                ;;
-        esac
-    }
+            fi
+        fi
 
-    #add a dependency to the project. The dependency should be a git repository.
-    shu.Depget(){ local url="$@";
-        shu.initFolder
-
-        local originalUrl=$url
-
-        shu.yaml.append "shu.yaml" ".deps" "$url"
+        shu.yaml.appendObject "shu.yaml" ".project-commands" "cmd:$command" "path:$packageAndPath" "info:$information"
         if [ "$_error" != "" ] && [ "$_error" != "$ERROR_AREADY_DONE" ]; then
-            _error="Error adding dependency '$originalUrl' to shu.yaml: $_error"
+            _error="Error adding project command '$command': $_error"
             return 1
         fi
 
-        shu.restoreDep "$url"
-        echo "returned from restoreDep with _r='$_r' and _error='$_error'"
-        if [ "$_error" != "" ]; then
-            _error="Error restoring dependency '$originalUrl': $_error"
-            return 1
+        error=""
+        _r=""
+        if [ "$forceUpdate" == "true" ]; then
+            _r="updated"
         fi
 
-        _error=""
-        shu.yaml.get "shu.yaml" ".name"; local projectName="$_r"
-        echo "Added/restored dependency '$originalUrl' to project '$projectName'."
+        return 0
     }
 
-    #clean only dependencies. Use 'shu clean' instead.
-    shu.Depclean(){
-        #remove ./.shu folder
-        rm -rf .shu
-        echo "Removed .shu folder"
-    }
-
-    #restore only dependencies. Use 'shu restore' instead.
-    shu.Deprestore(){
-        #restore all dependencies from shu.yaml
-        if [ ! -f "shu.yaml" ]; then
-            _error="$ERROR_NO_SHU_DIRECTORY"
-            return 1
-        fi
-
-        shu.yaml.getArray "shu.yaml" ".deps[]"; local deps=("${_r[@]}")
-        if [ "$_error" != "" ]; then
-            _error="Error getting dependencies from shu.yaml: $_error"
-            return 1
-        fi
-
-        for dep in "${deps[@]}"; do
-            echo "---->restoring dep '$dep'"
-            shu.restoreDep "$dep" "" true
-            if [ "$_error" != "" ] && [ "$_error" != "$ERROR_AREADY_DONE" ]; then
-                shu.printError "Error restoring dependency '$dep': $_error"
+    shu.getPCmdDepIndex(){ local command="$1"
+        #get the index of the command in the cmddeps section of shu.yaml
+        local index=0;
+        while true; do
+            shu.yaml.getArrayObject "shu.yaml" ".project-commands" "$index"; local pcmds=("${_r[@]}")
+            if [ "$_error" == "$ERROR_INDEX_OUT_OF_BOUNDS" ]; then
+                _error=""
+                _r="-1"
+                break;
+            elif [ "$_error" != "" ]; then
+                _error="Error getting project commands from shu.yaml: $_error"
+                _r="-1"
+                return 1
             fi
+            
+            if [ "${#pcmds[@]}" -eq 0 ]; then
+                _error=""
+                _r="-1"
+                return 0
+            fi
+
+            if [ "${pcmds[0]}" == "cmd:$command" ]; then
+                _error=""
+                _r="$index"
+                return 0
+            fi
+
+            index=$((index + 1))
         done
 
-        echo "All dependencies restored from shu.yaml"
-
         _error=""
-
+        _r="-1"
+        return 0
     }
 
-    #internal (private) functions {
-        #download (clone) repository to <current directory>/.shu
-        #
-        #https://path.to/repo.git -> clone to .shu/packages/repo
-        #https://path.to/repo.git@branch_or_tag -> clone to .shu/packages/repo and checkout branch_or_tag
-        #https://path.to/repo.git#/path/to/dirName -> clone to a temp folder and copy the contents of dir to .shu/packages/dirName
-        #https://path.to/repo.git@branch_or_tag#/path/to/dirName -> clone to a temp folder, checkout branch_or_tag and copy the contents of dir to .shu/packages/dirName
-        #
-        # additionaly, the string 'as <packageName>' can be used to specify the package name
-        #
-        #_r is set to the path of the cloned repository
-        shu.restoreDep(){ local url=$1; local destinationFolder=${2:-$(realpath -m "$(pwd)/.shu/packages")}; local ignoreAlreadyDoneError=${3:-false}
-            #check if url contains 'as <packageName>'
-            local packageName="";
-            local branch="";
-            local path="";
 
-            local forcedPackageName="";
-            if [[ $url == *" as "* ]]; then
-                forcedPackageName=${url##* as }
-                url=${url%% as *}
-            fi
-
-            
-            #check if url contains '#'
-            if [[ $url == *"#"* ]]; then
-                path=${url#*#}
-                url=${url%%#*}
-
-                
-                packageName="$(basename "$path")"
-                
-                echo 'if [ -d "'$destinationFolder'/'$path'" ]; then'
-                if [ -d "$destinationFolder/$path" ]; then
-                    _error="Destination folder '$path' already exists. Please remove it, specify a different destination folder or use 'as <name>' to use a name for this dependency."
-                    return 1
-                fi
-            fi
-            
-            #check if url contains '@'
-            if [[ $url == *"@"* ]]; then
-                branch=${url#*@}
-                url=${url%%@*}
-            fi
-            
-            if [ "$packageName" == "" ]; then
-            
-                packageName=$(basename "$url")
-
-                #check if url contains .git
-                if [[ $url == *.git ]]; then
-                    packageName=${packageName%.git}
-                fi
-            fi
-
-            if [ "$forcedPackageName" != "" ]; then
-                packageName="$forcedPackageName"
-            fi
-
-            echo ""
-            echo "==============================="
-            echo "url: $url"
-            echo "branch: $branch"
-            echo "path: $path"
-            echo "packageName: $packageName"
-            echo "destinationFolder: $destinationFolder"
-            echo "==============================="
-
-            #check if destination folder exists, if not, create it
-
-            if [ "$path" != "" ]; then
-                shu.cloneAndGetSubFolder "$url" "$path" "$branch" "$destinationFolder/$packageName"
-                if [ "$_error" != "" ] && ([ "$_error" != "$ERROR_AREADY_DONE" ] || [ "$ignoreAlreadyDoneError" == "false" ]); then
-                    _error="Error cloning repository '$url' and get the subfolder '$path': $_error"
-                    return 1
-                fi
-            else
-                shu.clone "$url" "$branch" "$destinationFolder/$packageName"
-                if [ "$_error" != "" ] && ([ "$_error" != "$ERROR_AREADY_DONE" ] || [ "$ignoreAlreadyDoneError" == "false" ]); then
-                    _error="Error cloning repository '$url': $_error"
-                    return 1
-                fi
-            fi
-
-            #get all main scripts from shu.yaml in the package
-            if [ -f "$destinationFolder/$packageName/shu.yaml" ]; then
-                shu.yaml.getArray "$destinationFolder/$packageName/shu.yaml" ".main[]"; local mainScriptList="$_r"
-                
-                if [ "$mainScriptList" == "" ]; then
-                    _error="No main scripts found in shu.yaml of package '$packageName'. Please add scripts to the main section."
-                    return 1
-                fi
-
-                for script in $mainScriptList; do
-                    chmod +x "$destinationFolder/$packageName/$script"
-                done
-            fi
-
-            local currDir=$(pwd)
-            if [ ! -d "$destinationFolder/$packageName" ]; then
-                _error="package '$packageName' not found in destination folder '$destinationFolder' after clone. (??)"
-                cd "$currDir"
-                return 1
-            fi
-            cd "$destinationFolder/$packageName"
-
-            shu.Restore
-            
-            cd "$currDir"
-            if [ "$_error" != "" ] && [ "$_error" != "$ERROR_AREADY_DONE" ] && [ "$_error" != "$ERROR_NO_SHU_DIRECTORY" ]; then
-                _error="Error restoring dependencies for package '$packageName': $_error"
-                cd "$currDir"
-                return 1
-            fi
-            _error=""
-
-            _r="$destinationFolder/$packageName"
-        }
-
-        shu.cloneAndGetSubFolder(){ local url=$1; local path=$2; local branch=$3; local destinationPath="$4"
-            #create a temp folder
-            if [ -d "$destinationPath" ]; then
-                _error="$ERROR_AREADY_DONE"
-                return 1
-            fi
-
-            local tempDir="$(mktemp -u)$RANDOM"
-
-            echo "detinationPath: $destinationPath"
-
-
-            #echo "url: $url"
-            #echo "branch: $branch"
-            #echo "path: $path"
-            #echo "destinationPath: $destinationPath"
-            #echo "tempDir: $tempDir"
-
-            shu.clone "$url" "$branch" "$tempDir"
-            if [ -d "$tempDir/$path" ]; then
-                #copy the contents of the subfolder to .shu/packages/<projectName>
-                mkdir -p "$destinationPath/"
-
-                cp -r "$tempDir/$path/"* "$destinationPath/"
-                rm -rf "$tempDir"
-            else
-                _error="subfolder '$path' does not exist in the repository."
-                rm -rf "$tempDir"
-                return 1
-            fi
-            _error=""
-        }
-
-        shu.clone(){ local url=$1; local branch=$2; local dest=$3
-            if [ -d "$dest" ]; then
-                _error="$ERROR_AREADY_DONE"
-                return 1
-            fi
-
-            echo 'git clone --recursive "'$url'" "'$dest'"'
-            git clone --recursive "$url" "$dest" > /dev/null 2>/tmp/shu-clone-error.log
-            if [ $? -ne 0 ]; then
-                echo 4444
-                _error="error runing git clone: $(cat /tmp/shu-clone-error.log)"
-                rm /tmp/shu-clone-error.log
-                return 1
-            fi
-            
-            git config --global --add safe.directory "$dest" > /dev/null 2>/tmp/shu-safe-dir-error.log
-            if [ $? -ne 0 ]; then
-                _error="error adding '$dest' to safe directories: $(cat /tmp/shu-safe-dir-error.log)"
-                rm /tmp/shu-safe-dir-error.log
-                return 1
-            fi
-
-            if [ "$branch" != "" ]; then
-                local retFolder="$(pwd)"
-                #echo "ret folder: $retFolder"
-                cd "$dest"
-                git checkout "$branch" > /dev/null 2>/tmp/shu-checkout-error.log
-                if [ $? -ne 0 ]; then
-                    _error="error checking out branch '$branch': $(cat /tmp/shu-checkout-error.log)"
-                    rm /tmp/shu-checkout-error.log
-                    cd "$retFolder"
-                    return 1
-                fi
-
-                cd "$retFolder"
-            fi
-            #delete all .git folders in the destination
-            find "$dest" -type d -name ".git" -exec rm -rf {} +
-
-            _error=""
-        }
-    #}    
 #}
 
 #functions for manipulating yaml files {
@@ -840,9 +663,16 @@ shu.printError(){
             return 1
         fi
 
+        if [[ "$key" == .* ]]; then
+            #remove the first dot from the key
+            key="${key:1}"
+        fi
+
         #check if the key exists in the yaml file
-        if yq eval ".\"$key\"" "$file" > /dev/null 2>&1; then
+        tmp=$(yq eval ".$key" "$file")
+        if [ "$tmp" != "null" ]; then
             _r="true"
+            _error=""
             return 0
         else
             _r="false"
@@ -872,6 +702,28 @@ shu.printError(){
             _r="false"
             return 1
         fi
+    }
+
+    #return an array with key[: value]
+    shu.yaml.listProperties(){ local file="$1"; local key="$2"; local _allwValues="${3:-false}"
+        ret=()
+        shu.yaml.getArray "shu.yaml" "$key | keys | .[]"; local tmpResult=("${_r[@]}")
+        if [ "$_error" != "" ]; then
+            _error="Error getting properties from yaml file '$file': $_error"
+            return 1
+        fi
+
+        for prop in "${tmpResult[@]}"; do
+            if [ "$_allwValues" == "true" ]; then
+                shu.yaml.get "shu.yaml" "$key.$prop"; local value="$_r"
+                ret+=("$prop: $value")
+            else
+                ret+=("$prop")
+                
+            fi
+        done
+
+        _r=("${ret[@]}")
     }
 
     #returns, via _r, the value of the key in the yaml file (note that the value can be a list)
@@ -922,6 +774,7 @@ shu.printError(){
         fi
 
         _r=()
+
         while IFS= read -r line; do
             _r+=("$line")
         done < <(yq eval ".${key}" "$file")
@@ -930,11 +783,147 @@ shu.printError(){
         return 0
     }
 
+    #returns _r with a bash array of string in the format "key:value"
+    shu.yaml.getArrayObject(){ local file="$1"; local key="$2"; local index="$3"
+        if ! command -v yq &> /dev/null; then
+            _error="yq is not installed. Please install yq (Mike Farah's version in Go)."
+            return 1
+        fi
+
+        if [ ! -f "$file" ]; then
+            _error="File '$file' not found."
+            return 1
+        fi
+
+        if [[ "$key" == .* ]]; then
+            key="${key:1}"
+        fi
+
+        # Verifica se o índice é número
+        if ! [[ "$index" =~ ^[0-9]+$ ]]; then
+            _error="Index must be a non-negative integer."
+            return 1
+        fi
+
+        # Verifica se o índice é válido
+        local arrayLength
+        arrayLength=$(yq eval ".${key} | length" "$file")
+        if [ "$index" -lt 0 ] || [ "$index" -ge "$arrayLength" ]; then
+            _error="$ERROR_INDEX_OUT_OF_BOUNDS"
+            return 1
+        fi
+
+        # Extrai as keys do objeto no índice
+        local keys
+        mapfile -t keys < <(yq eval ".${key}[$index] | keys[]" "$file")
+
+        # Para cada key, extrai o valor e monta key:value
+        _r=()
+        for k in "${keys[@]}"; do
+            # Remove aspas se houver no k
+            k="${k%\"}"
+            k="${k#\"}"
+
+            local value
+            value=$(yq eval ".${key}[$index].$k" "$file")
+            # Remove aspas do value, se existir
+            value="${value%\"}"
+            value="${value#\"}"
+
+            _r+=("$k:$value")
+        done
+
+        _error=""
+        return 0
+        
+
+    }
+
+    shu.yaml.removeArrayElement() {
+        local file="$1"
+        local arrayKey="$2"
+        local index="$3"
+
+        if [ ! -f "$file" ]; then
+            _error="File '$file' not found."
+            return 1
+        fi
+
+        if ! command -v yq &> /dev/null; then
+            _error="yq is not installed. Please install yq (Mike Farah's version in Go)."
+            return 1
+        fi
+
+
+        if [[ "$arrayKey" == .* ]]; then
+            #remove the first dot from the key
+            arrayKey="${arrayKey:1}"
+        fi
+
+        yq eval -i ".${arrayKey} |= del(.[${index}])" "$file" 2>/tmp/shu-yaml-remove-array-element-error.log
+        if [ $? -ne 0 ]; then
+            _error="Error removing element at index '$index' from array '$arrayKey' in file '$file': $(cat /tmp/shu-yaml-remove-array-element-error.log)"
+            rm /tmp/shu-yaml-remove-array-element-error.log
+            return 1
+        fi
+        rm /tmp/shu-yaml-remove-array-element-error.log
+        _error=""
+        return 0
+    }
+
+    shu.yaml.appendObject() {
+        local file="$1"
+        local arrayKey="$2"
+        shift 2
+
+        if ! command -v yq &> /dev/null; then
+            _error="yq is not installed. Please install yq (Mike Farah's version in Go)."
+            return 1
+        fi
+
+        if [ ! -f "$file" ]; then
+            _error="File '$file' not found."
+            return 1
+        fi
+
+        if [[ "$arrayKey" == .* ]]; then
+            arrayKey="${arrayKey:1}"
+        fi
+
+        # Monta o objeto JSON
+        local json_obj="{"
+        local first=1
+        for kv in "$@"; do
+            local key="${kv%%:*}"
+            local value="${kv#*:}"
+            # Adiciona vírgula para todos menos o primeiro
+            if [ $first -eq 0 ]; then
+                json_obj+=","
+            fi
+            # Escapa aspas simples no valor e monta par chave: valor string
+            value=${value//\'/\'\\\'\'}
+            json_obj+="\"$key\":\"$value\""
+            first=0
+        done
+        json_obj+="}"
+
+        # Garante que a chave é uma lista (cria se não existir)
+        yq eval "if .${arrayKey} == null or .${arrayKey} | type != \"!!seq\" then .${arrayKey} = [] else . end" -i "$file"
+
+        # Adiciona o objeto ao array
+        yq eval ".${arrayKey} += [${json_obj}]" -i "$file"
+    }
+
     #erase the value of the key in the yaml file and set it to the value provided
     shu.yaml.set() {
         local file="$1"
         local key="$2"
         local value="$3"
+
+        if [[ "$key" == .* ]]; then
+            #remove the first dot from the key
+            key="${key:1}"
+        fi
 
         if [ ! -f "$file" ]; then
             _error="File '$file' not found."
@@ -947,12 +936,14 @@ shu.printError(){
 
             return 1
         fi
-        yq eval -i ".$key = \"$value\"" "$file"
 
+        yq eval -i ".$key = \"$value\"" "$file" 2>/tmp/shu-yaml-set-error.log
         if [ $? -ne 0 ]; then
-            _error="Error setting key '$key' to value '$value' in file '$file'."
+            _error="Error setting key '$key' to value '$value' in file '$file': $(cat /tmp/shu-yaml-set-error.log)"
+            rm /tmp/shu-yaml-set-error.log
             return 1
         fi
+        rm /tmp/shu-yaml-set-error.log
 
         _error=""
     }
@@ -973,6 +964,11 @@ shu.printError(){
             yq eval -i "$key= [\"$value\"]" "$file"
         fi
 
+        if [[ "$key" == .* ]]; then
+            #remove the first dot from the key
+            key="${key:1}"
+        fi
+
         if [ $? -ne 0 ]; then
             _error="Error appending value '$value' to key '$key' in file '$file'."
             return 1
@@ -980,8 +976,38 @@ shu.printError(){
 
         _error=""
     }
+
+    shu.yaml.remove(){ local file="$1"; local key="$2"
+        if [ ! -f "$file" ]; then
+            _error="File '$file' not found."
+            return 1
+        fi
+
+        #check if the key exists in the yaml file
+        if shu.yaml.containsKey "$file" "$key"; then
+            yq eval -i "del(.${key})" "$file"
+            if [ $? -ne 0 ]; then
+                _error="Error removing key '$key' from file '$file'."
+                return 1
+            fi
+        else
+            _error="Key '$key' not found in file '$file'."
+            return 1
+        fi
+
+        _error=""
+    }
 #}
 
+
+# Se o script estiver sendo *sourced*, registre o autocompletion
+if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+    complete -F _shu_autocomplete shu
+    export SHU_PATH="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+    return
+
+fi
+
+
 shu.main "$@"; retCode=$?
-echo "retCode: $retCode"
 exit $retCode

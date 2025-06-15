@@ -1,4 +1,6 @@
 #!/bin/bash
+#allow hotreload for shellscript development. Basically, it will monitor some files for changes and run a command when some of them change.
+
 
 shellscriptdev(){
     #if no args or help
@@ -14,7 +16,6 @@ shellscriptdev(){
     local fileNames+=("$shFile")
     local lastChangeTimes=()
 
-    
     while true; do
         local fire=false
         local tmpNewChangeTimes=()

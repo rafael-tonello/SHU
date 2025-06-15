@@ -814,7 +814,7 @@ SHU_MISC_LOADED=true
 #defined by tput cols, or 80 if tput is not available.
 #_print ($2) can be used to control if the line should be printed or not. The
 #default behavior is to print the line (_print = true).
-misc.CreateVerticalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
+misc.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
     local _length=$(tput cols 2>/dev/null || echo 80)
     if [ -z "$_length" ] || [ "$_length" -le 0 ]; then
         _length=80
