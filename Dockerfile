@@ -24,11 +24,11 @@ ENV PATH=$GOPATH/bin:$GOROOT/bin:$PATH
 RUN go install github.com/mikefarah/yq/v4@latest
 
 
-COPY ./src /opt/src
+COPY . /opt
 COPY ./src/tools/shhotreload.sh /usr/bin/shhotreload.sh
 RUN chmod +x /usr/bin/shhotreload.sh
-WORKDIR /opt/src
+WORKDIR /opt/tests
+RUN alias shu=/opt/src/shu-cli.sh
+RUN git config --global --add safe.directory '*'
 
-CMD ["/bin/bash", "-c", "/opt/src/shu-cli.test.sh"]
-
-
+CMD ["/bin/bash", "-c", "./runtests.sh"]

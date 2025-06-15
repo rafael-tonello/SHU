@@ -9,7 +9,7 @@ services:
         image: shu-cli-dev
         volumes:
             - type:  bind
-              source: ./src
-              target: /opt/src
+              source: .
+              target: /opt
         command: >
-            bash -c '/usr/bin/shhotreload.sh "/opt/src/shu-cli.test.sh" "clear" "" "/opt/src/shu-cli.sh"'
+            bash -c 'cd /opt/tests; /usr/bin/shhotreload.sh "/opt/tests/runtests.sh" "clear" "" $(find *.sh ..)'
