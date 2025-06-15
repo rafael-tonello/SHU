@@ -1,6 +1,12 @@
-# Shu: A Shell Script Framework and Package Manager
+Shu: A Shell Script Framework and Package Manager
 # What is Shu?
 Shu is a shell script framework and package manager that makes it easy to write and share shell scripts. It provides a simple way to manage dependencies, install packages, and run scripts.
+
+# What I can do with aaa
+* You can use and write libraries in shellscript, use it in you projects and share it with others.
+* You can import existing shellscript projects, files and other git repositories.
+* You can build you project in a single .sh file, which can be used as a standalone script.
+* You can write and use libraries (packages) to share and reuse code.
 
 # Getting Started
 Install Shu
@@ -31,22 +37,63 @@ shu install [package]: Install a package system-wide.
 How it Works
 Shu uses a simple YAML file called shu.yaml to manage your project's dependencies and scripts. When you run a command, Shu reads the shu.yaml file and performs the necessary actions.
 
-## Example Use Case
-Here's an example of how to use Shu to write a simple script:
+# Examples
+Before diving int the details, let's look at some examples of how to use aaa.
 
-```bash
-# Initialize a new project
-shu init myscript
+## example 1 - Initing a basic project
+```sh
+shu init 'my project'
+# this will create somes files and folders in the current directory:
+# - my_project/
+#   +->.shu/
+#   |  +->packages/
+#   |       +->shu-misc/
+#   |           +->misc.sh (this is a basic library of Shu, and allow the easy import 
+#   |                       of other libraries)
+#   +->shu.yaml (This is the shu project file. It holds the packages of the 
+#   |            ct, the main scripts and other metadata.)
+#   +->main.sh (This is a basic script. You can start writting your code here.)
 
-# Add a dependency
-shu get logger
+#main file content:
+# !/usr/bin/env shu
+# source ./shu/packages/shu-misc/misc.sh
+# echo "Hello, world!"
 
-# Write a script
-echo "logger.info 'Hello World!'" > main.sh
+./main.sh
 
-# Run the script
-shu run
+#this will print to the console:
+#$ Hello, world!
 ```
+
+## example 2 - Importing a library
+Initing the project and importing a library
+```sh
+shu init 'my project'
+
+#import log library from shu repository
+shu get "https://github.com/rafael-tonello/shu.git#src/libs/log as ShuLogger"
+```
+
+main file content
+```sh
+# !/usr/bin/env shu
+
+#this is the basic library of SHU, and allow some useful functions. The importation occurs in the correct path, no matter where the script is executed.
+source "$(dirname "${BASH_SOURCE[0]}")/.shu/packages/shu-misc/shu-misc.sh"
+
+#import is a function from shu-misc, and allow you to easy sorce packages files (without need to source using the whole package path)
+Import ShuLogger
+
+#by default, _r is the used to return results from functions, avoiding spawning subshells.
+log.New; log="$_r"
+
+log.Info "main" "Hello, world!"
+
+#this will print to the console something like:
+#$ [ 20205-06-05 12:00:00.000][INFO][main] Hello, world!
+
+```
+
 This will create a new project called myscript, add the logger package as a dependency, write a simple script that uses the logger package, and run the script.
 
 #Contributing
@@ -70,15 +117,34 @@ Shu command line was inspired by 'go command line'.
     ./shu.yaml  -> shu information
     ./.shu      -> shu cache
 
+## Some conventions
+Bashscripts are a well know limitation for conventional programming. For example, function returns are projected to return error codes, instead of values. To lead with it, shu uses some conventions to make it easier to work with shell scripts:
 
+* _r: The variable _r is used to return values from functions. It is a convention that allows you to avoid spawning subshells and makes it easier to work with shell scripts.
+* _r2, _r..., _rN: Adicional returns, for multiple returns. Do not forget to uset the variables do prevent memory leaks.
+* _r_[name]: named return codes. Do not forget to uset the variables do prevent memory leaks.
+* _error: The variable _error is used to return error messages from functions. Should ever follow the conventional error code returning.
 ## Shu commands
 
-### shu init [name]
+### shu init
+```bash
+shu ini <projectName>
+```
 Initializes a shu project in the current folder. It creates a shu.yaml file, runs 'shu get shu-misc' and creates a file called 'main.sh' with a simple example of how to use shu.
 
 This command is not mandatory, and the shu files will be created if when you call other shu commands, but it is utils when you want to start a new project with a simple example.
 
 the 'name' parameter is optional, and if it is not present, the current folder name will be used as project name.
+
+### shu touch
+```bash
+shu touch <file[.sh]> [options]
+options:
+    --addmain: Add the file to the 'main' section of shu.yaml.
+```
+Creates a new script in the current project. If you specify a name with no .sh extension, it will be added automatically. If you want to add the file to the 'main' section of shu.yaml, you can use the --addmain option.
+
+The new will file will be generated with a line sourcing the shu-misc package, allowing you to use basic shu commands in your script.
 
 ### shu mainfile sub-cli
 Shu projects can have one or more main files. Manage it requires some commands that we decided to group in a sub-command called 'mainfile'.
@@ -169,7 +235,7 @@ deps:
 
 ```bash
     #/!/bin/bash
-    source ./.shu/packages/shu-misc/shu-misc.sh
+    source "$(dirname "${BASH_SOURCE[0]}")/.shu/packages/shu-misc/shu-misc.sh"
 
     shu.source logger
 
@@ -180,3 +246,5 @@ deps:
     o.Call '$log.info' 'info message'
 
 ```
+[ ] Run shu cmddep check after get a package or restoring project
+[ ] Create an alias named 'alias' and redirect it to project_commands (git uses alias and is very nice.. and it is the same funcionality as project_commands)
