@@ -253,7 +253,7 @@ SHU_MISC_LOADED=true
             if [ "$arg" == "" ]; then
                 continue;
             fi
-
+            
             if [ -z "$obj" ]; then
                 obj="$arg"
             else
@@ -318,6 +318,10 @@ SHU_MISC_LOADED=true
             #separate the object name from the key (uses lastDotIndex)
             okey="${obj##*.}"
             obj="${obj%.*}"
+
+            shift 1
+        else
+            shift 2
         fi
 
         o.resolveFinalObjectAndKey "$obj" "$okey"; local obj="$_r"; local okey="$_r_key"
@@ -327,20 +331,22 @@ SHU_MISC_LOADED=true
         fi
 
         declare -n var="$obj""_""$okey"
-        var="$value"
+
+        #if there more than one argument
+        if [ "$#" -gt 1 ]; then
+            #if it is an array, set the array
+            var=("$@")
+        elif [ "$#" -eq 1 ]; then
+            #if it is a single value, set the value
+            var="$value"
+        fi
     }
 
     o.Get(){ local obj="$1"; local okey="$2"
-
-
         #chec if key contains '.'
         o.resolveFinalObjectAndKey "$obj" "$okey"; local obj="$_r"; local okey="$_r_key"
-        if [ ! -z "$_error" ]; then
-            _error="Could not get final object name: $_error"
-            return 1
-        fi
-        declare -n var="$obj""_""$okey"
-        _r="$var"
+        o._get "$obj" "$okey"; local retCode=$?
+        return $retCode
     }
 
     o._get(){ local obj="$1"; local okey="$2"
@@ -350,7 +356,16 @@ SHU_MISC_LOADED=true
         fi
 
         declare -n var="$obj""_""$okey"
-        _r="$var"
+
+        #check if array size if greater than 1
+        #if [ "${#var[@]}" -gt 1 ]; then
+        #check if #var is an array
+        if declare -p var &>/dev/null && [[ "$(declare -p var)" == *"declare -a"* ]]; then
+            #if it is an array, return the array
+            _r=("${var[@]}")
+        else
+            _r="${var[0]}"
+        fi
     }
 
     o.Has(){ local obj="$1"; local okey="$2"
@@ -909,3 +924,136 @@ misc.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
         misc.printRed "$ret\n" > /dev/stderr
     }
 #}
+
+#allow to use optional pattern in shellscript.
+#  1) Optional function should return a command call (to a function) in the format 'optfunc_<remainFuncName> arg1 arg2 ...'
+#  2) During the parsing, the functin 'optfunc_<remainFuncName>' will be called with the logObject as the last argument.
+#  3) If you pass an argument that begins with '--with-<aFunctionName>', the function 'aFunctionName' will be called, and
+#    this function (aFunctionName) should return a command call in the format 'optfunc_<remainFuncName> arg1 arg2 ...' (as 
+#    described in '1)'. All argumenter until next one that begins with '--' will be passed to the function
+#  4) the functions 'optfunc_<remainFuncName>' should set properties in the object receiveid as the last argument, setting
+#     up it.
+#  5) If you use --with-<something>, and the function <something> does not exist, the property <something> can be set
+#    in the object with the value of the next argument if you use '--allow-prop-set' or '-aps' as any of the arguments (the 
+#    arumgnet '--allow-prop-set' or '-aps' is removed from the argument list before parsing of optionals). If you do not
+#    use '--allow-prop-set' or '-aps', an error is printed and the parsing is aborted if the function <something> does not exist.
+#
+# #Example1:
+#       withFile(){ local fName="$1"; local maxSizeBytes="$2"; 
+#           optfunc_withFile_func(){ local fName="$1"; local maxSizeBytes="$2"; local obj="$3";
+#               #create a file driver
+#               o.Set "$obj.fName" "$fName"
+#               o.Set "$obj.maxSizeBytes" "$maxSizeBytes"
+#           }
+#       
+#           #should return a function call that starts with 'optfunc_'
+#           _r="optfunc_withFile_func \"$fName\" \"$maxSizeBytes\""
+#       }
+#       
+#       myFunction(){
+#           o.New; local obj="$_r"
+#           misc.parseOptionals "$obj" "$@"; local retCode=$?
+#           echo "fileName: $(o.Get "$obj" "fileName")"
+#       }
+#
+#       #call the function 'withFile' option  
+#       myFunction --with-withFile "myfile.txt" 1024
+#   
+#       #also call 'withFile', because 'misc.parseOptionals' will try to find 'file' function using 'with' prefix (and capitalizing the first letter)
+#       myFunction --with-file "myfile.txt" --with-maxSizeBytes 1024
+#
+# #example2:
+#   myFunction(){
+#       o.New; local obj="$_r"
+#       misc.parseOptionals "$obj" "$@"; local retCode=$?
+#       echo "fileName: $(o.Get "$obj" "fileName")"
+#   }
+#   myFunction --allow-prop-set --with-fName "myfile.txt" --with-maxSizeBytes 1024
+misc.parseOptionals(){
+    local obj="$1"; shift
+    local i=0
+    local allowPropSet=false
+    if [[ "$1" == *"--allow-prop-set"* ]] || [[ "$1" == *"-aps"* ]]; then
+        allowPropSet=true
+        #remove the --allow-prop-set or -aps from the arguments
+        set -- "${@/--allow-prop-set/}"
+        set -- "${@/-aps/}"
+    fi
+    while true; do
+        local arg="${!i}"; ((i++))
+        if [[ -z "$arg" ]]; then
+            break
+        fi
+
+        #check if argument begins with "--with-"
+        if [[ "$arg" == --with-* ]]; then
+            #remove "--with-" from the argument
+            arg=${arg:7}
+
+            #function can or not start with 'with'.
+            #try to find 
+            local funcName="$arg"
+
+            if ! declare -f "$funcName" > /dev/null; then
+                #try find with 'with' prefix (and first letter capitalized)
+                
+                #capitalize the first letter of the argument
+                arg="${arg^}"
+                funcName="with$arg"
+            fi
+            
+            #check if the function exists
+            if declare -f "$funcName" > /dev/null; then
+
+                local funcArgs=();
+                while true; do
+                    local nextArg="${!i}";
+                    if [[ "$nextArg" == --* ]] || [[ -z "$nextArg" ]]; then
+                        break;
+                    fi
+                    funcArgs+=("$nextArg")
+                    ((i++))
+                done
+
+                #call the function with the obj as argument
+                eval "$funcName  \"${funcArgs[@]}\""
+                local theOptionalFunc="$_r"
+                eval "$theOptionalFunc \"$obj\""
+            else
+                if  ! $allowPropSet; then
+                    _error="Function '$funcName' not found. Did you forget to implement it?"
+                    misc.printError "$_error"
+                    return 1
+                fi
+                #just set the property $arg in the object with the value of the next argument
+                o.Set "$obj" "$arg" "${!i}"
+                ((i++))
+            fi
+            #check if argument begin with "optfunc_"
+        elif [[ "$arg" == optfunc_* ]]; then
+            eval "$arg \"$obj\""
+        elif [[ "$arg" == --* ]]; then
+            local key=""
+            local value=""
+            #remove "--" from the argument
+            arg=${arg:2}
+            #check if $arg contains ':' or  '='
+            if [[ "$arg" == *":"* ]] || [[ "$arg" == *"="* ]]; then
+                #split the argument by ':' or '='
+                key="${arg%%:*}"; key="${key%%=*}"
+                value="${arg#*:}"; value="${value#*=}"
+            else
+                #value is in the next agument
+                key="$arg"
+                value="${!i}"; ((i++))
+            fi
+
+            o.Set "$obj" "$key" "$value"
+        fi
+    done
+}
+
+
+misc.parseOptions(){
+
+}
