@@ -1,0 +1,24 @@
+#Project name. We use it sometimes
+name:
+
+#main scripts of the project. When you call 'shu run' without arguments, all of these scripts are
+#executed. Also, when you run 'shu build', all these scripts will be runned with you call the built
+#script
+
+main:
+
+#project packages. This list is used to restore .shu/packages folder when you call 'shu restore'
+packages:
+
+#project commands. You can call commands by using shu <command> [args]. You also can override SHU 
+# default  #commands ('build', 'run', ...). When writing a command, do not forget to treat help 
+#requests (-h, --help and help).
+#Also, you command can receive, as a first argument, the string 'bashCompletion', That is SHI 
+#trying get bash completions from your command. To generate bash completion, your script should
+#print the completions to stdout (use spaces to separate the completions). Second argument is
+#the string 'typed' by the user before pressing tab.
+project-commands:
+
+#Commands needed to run the project. When you call 'shu cmddep check', all this commands will be
+#checked
+cmddeps:

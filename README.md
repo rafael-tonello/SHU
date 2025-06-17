@@ -12,10 +12,10 @@ Shu is a shell script framework and package manager that makes it easy to write 
 Install Shu
 To install Shu, simply clone this repository and add the shu script to your system's PATH.
 
+or use the following command to install it directly from the repository:
+
 ```bash
-git clone https://github.com/your-username/shu.git
-cd shu
-sudo cp shu /usr/local/bin/
+curl -sSL https://raw.githubusercontent.com/rafael-tonello/SHU/main/src/tools/shu-install.sh | bash
 ```
 
 Initialize a New Project
@@ -99,10 +99,105 @@ This will create a new project called myscript, add the logger package as a depe
 #Contributing
 Contributions are welcome! If you'd like to contribute to Shu, please fork this repository and submit a pull request.
 
-#License
+# How it works
+## getting packages
+Shu uses a simple YAML file called shu.yaml to manage your project's dependencies and scripts and .shu folder to store downloaded packages.
+Packages can have its own shu.yaml, that will be read by shu and will have its own dependencies and scripts dowloaded (to its own .shu folder).
+
+.shu folder can be deleted, and you can easyly restore it by running the command 'shu restore' or 'shu get' (with no args, shu get redirects to shu restore).
+# License
 Shu is licensed under the MIT License.
 
+# Programming using Framework
+Shu in addition to being a package manager CLI for shellscripting, it is also a framework for shell scripting. The SHU code contains some libraries that can be used to write shell scripts in a more structured way, allowing you to use object orientation, interfaces, and other programming concepts. And it have some important conventions that should be noticed, that is described below.
 
+## Important concepts and conventions
+To lead with the limitations of shell scripts, Shu uses some conventions and concepts that are important to understand when working with it.
+
+Understanding these concepts is importante to effectively use Shu and to a further dive into its features.
+
+* _r: Default return variable. To avoid spawning subshells and to allow returing values from functions, Shu uses the variable _r to return results.
+* _error: The variable _error is used to return error messages from functions. You can use ':' to add context to error. A function should return an error or print it, but should avoid both. Also functions should return normal shellscript return codes.
+* object orientation:
+    * In the memory, objects are groups of variables that starts with a common prefix.
+    * Classes and methods uses objects references (that are a prefix used by a group of variables).
+    * classes are functions that receive an 'object' as the first parameter.
+    * classes methods should be named <className>.<methodName>.
+    * misc.sh contains functions to operate objects
+        * o.New: creates a new object, returning it (the reference) in the _r variable.
+        * o.Get: gets a property from an object, returning it in the _r variable.
+        * o.Set: sets a property in an object. Multiple arguments will be set as an array.
+        *o.Has: checks if an object has a property, returning true or false in the _r variable.
+        * o.Delete: deletes a property from an object.
+        * o.Destroy: destroys an object, deleting all its properties. If second argument is 'true', it will also delete all child obejects.
+        * o.Implements: checks if an object (or class) implements a interface (another class).
+        * o.Call: calls a method of an object. Shu will look for the className and call the function <className>.<methodName> with the object reference as the first parameter and the rest of arguments passed to the o.Call as remain arguments.
+    * Shu uses 'duck typing'
+    * To create objects, classes tipically implements a method called New (<className>.New). But you can use other functions. The functions that creates objects should return the object reference in the _r variable.
+
+When you use 'shu init' or 'shu touch' command, the created file will have a important import line at the top, that sources the misc.sh file, allowing you to use the object manipulation functions.
+
+```bash
+#Interface IGreeter
+    IGreeter.Greet(){ :; }
+
+
+#MyClass definition
+    MyClass.New(){
+        if [ $# -ne 2 ]; then
+            _error="MyClass.New: expected 2 arguments, got $#"
+            return 1
+        fi
+
+        o.New MyClass; local ref="$_r"
+        o.Set $ref name "$1"
+        o.Set "$ref.age" "$2" #you can use object notation
+
+        unset _error
+        _r="$ref" #return the object reference
+    }
+
+    MyClass.Greet(){
+        local ref="$1"
+        if ! o.Has "$ref" name; then
+            _error="MyClass.Greet: object '$ref' does not have a 'name' property"
+            return 1
+        fi
+        echo "Hello, $(o.Get "$ref" name)!"
+    }
+
+
+# Example of using the class
+    MyClass.New "Rafael" 30; local instance="$_r"
+    if [ ! -z "$_error" ]; then
+        echo "Error creating MyClass instance: $_error"
+        exit 1
+    fi
+
+    if o.Implements "$instance" IGreeter; then
+        o.Call "$instance.Greet"
+
+        myClass.Greet "$instance" # also works. In this case, the function is called directly.
+    else
+        echo "MyClass does not implement IGreeter: $_error"
+        exit 1
+    fi
+```
+
+# SHU Misc
+The SHU misc library is automatically downloaded and sourced when you run the 'shu init' command. Also, when you create a file using the 'shu touch' command, it will automatically source the misc library, allowing you to use its functions in your scripts.
+
+The misc library is the most important library of SHU Framework, and allow a lot of useful features, such as:
+* Object manipulation functions (o.New, o.Get, o.Set, o.Has, o.Delete
+* Error printing
+* the 'import' command
+
+
+## Import command
+The import command is a function that allows you to easily source files from packages. It does some magic tricks and telepathies to try to guess where the package files are located, that is inside .shu folder :p.
+
+Import will look inside .shu folder for packages and files and, if you pass the argument '--allow-subpackages', it will also look inside .shu folders of the packages.
+    
 
 
 # More about SHU
