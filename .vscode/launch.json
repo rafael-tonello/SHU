@@ -1,0 +1,24 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "bashdb",
+            "request": "launch",
+            "name": "Bash-Debug (current fle)",
+            "program": "${file}"
+        },
+        {
+            "name": "Bash-Debug (shu-cli.sh)",
+            "type": "bashdb",
+            "preLaunchTask": "prepare_temp_shu_folder",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/src/shu-cli.sh",
+            //use the env SHU_COMMAND as argument
+            "args": ["--debug-read-from-file", "/tmp/tmpshulaunchtaskvalue"],
+        }
+    ],
+}
