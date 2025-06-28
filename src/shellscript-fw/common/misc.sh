@@ -870,7 +870,7 @@ SHU_MISC_LOADED=true
     #}
 
     #IWorker is a class of works that can run by themselves, like a thread.
-    #This class is hight dependent of Schedule library (shu/src/libs/common/scheduler).
+    #This class is hight dependent of Schedule library (shu/src/shellscript-fw/common/scheduler).
     #IWorkder{
         #Receives a 'Scheduler' object to be able to schedule its work.
         IWorkder.Init(){ _error="Not implemented"; return 1; }

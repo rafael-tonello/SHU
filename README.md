@@ -8,6 +8,9 @@ Shu is a shell script framework and package manager that makes it easy to write 
 * You can build you project in a single .sh file, which can be used as a standalone script.
 * You can write and use libraries (packages) to share and reuse code.
 
+# developng hooks and commands
+SHU_BINARY variable and source + shu.Main
+
 # Getting Started
 Install Shu
 To install Shu, simply clone this repository and add the shu script to your system's PATH.
@@ -71,7 +74,7 @@ Initing the project and importing a library
 shu init 'my project'
 
 #import log library from shu repository
-shu get "https://github.com/rafael-tonello/shu.git#src/libs/log as ShuLogger"
+shu get "https://github.com/rafael-tonello/shu.git#src/shellscript-fw/log as ShuLogger"
 ```
 
 main file content
@@ -117,7 +120,7 @@ To lead with the limitations of shell scripts, Shu uses some conventions and con
 Understanding these concepts is importante to effectively use Shu and to a further dive into its features.
 
 * _r: Default return variable. To avoid spawning subshells and to allow returing values from functions, Shu uses the variable _r to return results.
-* _error: The variable _error is used to return error messages from functions. You can use ':' to add context to error. A function should return an error or print it, but should avoid both. Also functions should return normal shellscript return codes.
+* _error: The variable _error is used to return error messages from functions. You can use ':' to add context to error. A function should return an error or print it, but should avoid both. Also functions should return normal shellscript return codes. Also, if a function prints the error, it should not return it.
 * object orientation:
     * In the memory, objects are groups of variables that starts with a common prefix.
     * Classes and methods uses objects references (that are a prefix used by a group of variables).
@@ -197,8 +200,6 @@ The misc library is the most important library of SHU Framework, and allow a lot
 The import command is a function that allows you to easily source files from packages. It does some magic tricks and telepathies to try to guess where the package files are located, that is inside .shu folder :p.
 
 Import will look inside .shu folder for packages and files and, if you pass the argument '--allow-subpackages', it will also look inside .shu folders of the packages.
-    
-
 
 # More about SHU
 ## Shu command line
@@ -261,10 +262,10 @@ List all files in the 'main' section of shu.yaml file. If shu.yaml does not exis
 ### shu run
 Shu run is an alias for 'shu mainfile run'. It is used to run the main files of the current project. If no file is specified, it will run all files in the 'main' section of shu.yaml file. It was inspired by the 'go run' command.
 
-### shu dep sub-cli
-As ocurros with 'shu mainfiles', manage dependencies also requires some commands that wi decided to group in a sub-command called 'dep'.
+### shu pdeps sub-cli
+As ocurros with 'shu mainfiles', manage dependencies also requires some commands that wi decided to group in a sub-command called 'pdeps'.
 
-#### shu dep add 'package'[@version][#/path/to/folder]
+#### shu pdeps add 'package'[@version][#/path/to/folder]
 Installs (clones) a package in the current project:
 
 * run 'git clone 'package' ./.shu/packages/'package'
@@ -272,23 +273,23 @@ Installs (clones) a package in the current project:
 * if [@version] is present, run 'git checkout @version'
 * if [#/path/to/folder/ is present, only the subfolder 'path/to/folder' will be cloned.
 
-> you can use 'shu get', that is an alias for 'shu dep add' inspirated by 'go get' command.
+> you can use 'shu get', that is an alias for 'shu pdeps add' inspirated by 'go get' command.
 
 
-#### shu dep remove
+#### shu pdeps remove
 Removes a package from the current project:
-* removes the package from the 'deps' section of shu.yaml file
+* removes the package from the 'pdeps' section of shu.yaml file
 * removes the package folder from ./.shu/packages/'package'
 
-#### shu dep list
-Lists all packages in the 'deps' section of shu.yaml file. 
+#### shu pdeps list
+Lists all packages in the 'pdeps' section of shu.yaml file. 
 
 ### shu get
-Shu get is an alias for 'shu dep add'. It is used to retrieve a package and add it to the 'deps' section of shu.yaml file. If the package is already present, it will not be added again. The 'shu get' command was inspired by the 'go get' command, and it is used to retrieve packages. But, unlink 'go get', the packages are installed in you project instead of in your system.
+Shu get is an alias for 'shu pdeps add'. It is used to retrieve a package and add it to the 'pdeps' section of shu.yaml file. If the package is already present, it will not be added again. The 'shu get' command was inspired by the 'go get' command, and it is used to retrieve packages. But, unlink 'go get', the packages are installed in you project instead of in your system.
 
 
 ### shu restore
-read all 'deps' on 'shu.yaml' file and run 'shu get "dep"' for each dependency
+read all 'pdeps' on 'shu.yaml' file and run 'shu get "pdeps"' for each dependency
 
 ### shu install 'package'
 * run "git clone 'package' ~/.local/shu/installed/'package'"
@@ -316,7 +317,7 @@ project: shu-example
 main:
   - main.sh
 
-deps:
+pdeps:
     - obj #looks in 'shu repository'
     - http://git/repository/url.git@aabbcc #looks in 'git repository'
     - http://git/repository/url.git@aabbcc#path/to/subfolder #looks in 'git repository'
@@ -341,5 +342,6 @@ deps:
     o.Call '$log.info' 'info message'
 
 ```
-[ ] Run shu cmddep check after get a package or restoring project
-[ ] Create an alias named 'alias' and redirect it to project_commands (git uses alias and is very nice.. and it is the same funcionality as project_commands)
+[x] Run shu psysdeps check after get a package or restoring project
+[x] Rename shu commands to plural (like mainfiles)
+[x] Do not show heades in command outputs (like in lists).. the comand itself is the header and it allow a easy use of these commands within subshells

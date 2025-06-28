@@ -39,8 +39,8 @@ shu.pdeps.Help(){
     echo "                           - Get the SHU package from GitHub and add it to the project."
     echo "    shu pdeps get 'https://github.com/rafael-tonello/SHU.git@develop --not-recursive'"
     echo "                           - Get the SHU package from GitHub, checkout to develop branch and do not restore dependencies."
-    echo "    shu pdeps get 'https://github.com/rafael-tonello/SHU.git@develop#/src/libs/common"
-    echo "                           - Get the SHU package from GitHub, checkout to develop branch, copy only the contents of src/libs/common to the package folder."
+    echo "    shu pdeps get 'https://github.com/rafael-tonello/SHU.git@develop#/src/shellscript-fw/common"
+    echo "                           - Get the SHU package from GitHub, checkout to develop branch, copy only the contents of src/shellscript-fw/common to the package folder."
 
 }
 

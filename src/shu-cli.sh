@@ -18,7 +18,7 @@ export SHU_BINARY="$0"
 
 #shu values that can be overridden by environment variables {
     if [ -z "$SHU_GIT_REPO" ]; then SHU_GIT_REPO="https://github.com/rafael-tonello/SHU.git"; fi
-    if [ -z "$SHU_COMMON_FOLDER_SOURCE" ]; then SHU_COMMON_FOLDER_SOURCE="$SHU_GIT_REPO#src/libs/common"; fi
+    if [ -z "$SHU_COMMON_FOLDER_SOURCE" ]; then SHU_COMMON_FOLDER_SOURCE="$SHU_GIT_REPO#src/shellscript-fw/common"; fi
 #}
 
 shu.detectEnvAndGoRoot(){

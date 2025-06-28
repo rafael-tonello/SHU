@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 testScriptLocation="$(dirname "$(realpath "$BASH_SOURCE[0]")")"
-source "$testScriptLocation/../../../src/libs/common/tests.sh"
-source "$testScriptLocation/../../../src/libs/common/misc.sh"
-source "$testScriptLocation/../../../src/libs/serializers/jsonserializer.sh"
+source "$testScriptLocation/../../../src/shellscript-fwcommon/tests.sh"
+source "$testScriptLocation/../../../src/shellscript-fwcommon/misc.sh"
+source "$testScriptLocation/../../../src/shellscript-fwserializers/jsonserializer.sh"
 
 Tests.BeginGroup "JsonSerializer Tests"
     o.New; obj="$_r"
