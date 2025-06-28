@@ -46,7 +46,7 @@ shu.pdeps.Help(){
 
 
 shu.pdeps.Add(){
-    shu.pdeps.Get "$@"
+    shu.Main pdeps get "$@"
     return $?
 }
 
