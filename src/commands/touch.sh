@@ -1,10 +1,17 @@
 #!/bin/bash
 
 shu.Touch.Main(){
+    echo "touch main called"
     if [[ "$1" == "--help" || "$1" == "-h" || "$1" == "help" ]]; then
         shu.Touch.Help
         return 0
     fi
+
+    if [ "$SHU_PROJECT_ROOT_DIR" == "" ]; then
+        _error="$ERROR_COMMAND_REQUIRES_SHU_PROJECT"
+        return 1
+    fi
+    
 
     shu.Touch "$@"
     return $?
@@ -14,7 +21,6 @@ shu.Touch(){
     local addMain=false
     #check if some arg is '--addmain'
     if [[ "$@" == *"--addmain"* ]]; then
-        echo "aaaaaaaaaaaaaaaadddmain"
         addMain=true
         #remove --addmain from the arguments
         set -- "${@/--addmain/}"
@@ -39,7 +45,6 @@ shu.Touch(){
             return 1
         fi
 
-        shu.getShuProjectRoot_relative; local projectRoot="$_r"
         local fileNameWithoutExt="${fileName%.*}"
 
         cp "$shu_scriptDir/assets/templates/samplesh.sh" "$fileName" 2>/tmp/shu-touch-error.log
@@ -50,7 +55,7 @@ shu.Touch(){
         fi
         rm /tmp/shu-touch-error.log
         
-        local miscImport='source "'$projectRoot'.shu/packages/shu-common/misc.sh"'
+        local miscImport='source "'$SHU_PROJECT_ROOT_DIR'.shu/packages/common/misc.sh"'
         #replace placeholders
         sed -i "s|%miscplaceholder%|$miscImport|g" "$fileName" 2>/dev/null
         sed -i "s|%fnameplaceholder%|$fileNameWithoutExt|g" "$fileName" 2>/dev/null
@@ -58,7 +63,7 @@ shu.Touch(){
         chmod +x "$fileName"
 
         if [ "$addMain" == true ]; then
-            shu.main "mainfiles" "add" "$fileName"
+            shu.Main "mainfiles" "add" "$fileName"
             if [ "$_error" != "" ]; then
                 _error="Error adding file '$fileName' to main section of shu.yaml: $_error"
                 return 1
@@ -72,7 +77,7 @@ shu.Touch(){
 }
 
 shu.Touch.Help(){
-    echo "  touch <fileName>         - Create a new script file with the given name. If no extension is provided, .sh will be added."
+    echo "touch <fileName>         - Create a new script file with the given name. If no extension is provided, .sh will be added."
 }
 
 if [[ "$1" == "--help" || "$1" == "-h" || "$1" == "help" ]]; then
