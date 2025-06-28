@@ -19,6 +19,12 @@ packages:
 #the string 'typed' by the user before pressing tab.
 project-commands:
 
-#Commands needed to run the project. When you call 'shu cmddep check', all this commands will be
+#Commands needed to run the project. When you call 'shu psysdeps check', all this commands will be
 #checked
-cmddeps:
+sysdepss:
+
+#project properties managed by 'shu pprops'. You can use it as key-value storage for your project
+#allow you to store data and states for your project automations or wathever you want.
+#run 'shu pprops --help' for more information.
+#pprops can work with object notatio, so you can even create structured data.
+properties:

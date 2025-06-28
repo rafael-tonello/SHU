@@ -18,10 +18,10 @@
     #call a method (first way)
     '$%fnameplaceholder%'.sampleMethod "$obj" "first" "way"
 
-    #call a method (second way, using shu-common)
+    #call a method (second way, using common)
     o.Call "$obj" "sampleMethod" "second" "calling" "way"
 
-    #call a method (third way, using shu-common)
+    #call a method (third way, using common)
     o.Call "$obj.sampleMethod" "third" "way"
 }
 
