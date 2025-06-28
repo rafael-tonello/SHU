@@ -1,54 +1,105 @@
 #!/bin/bash
 
-SHU_VERSION="0.0.0"
+SHU_VERSION="0.1.0"
 shu_scriptFullPath="$(realpath "$0")"
 shu_scriptDir="$(dirname "$shu_scriptFullPath")"
-
-
+export SHU_PROJECT_WORK_DIR="" #setted by shu.Main
+export SHU_PROJECT_ROOT_DIR="" #setted by shu.Main. if empty, it means that the current directory is not a shu project
+export SHU_PROJECT_NAME="" #setted by shu.Main. if empty, it means that the current directory is not a shu project
+export SHU_BINARY="$0"
 
 #Common errors
     ERROR_AREADY_DONE="already done"
     ERROR_NO_SHU_DIRECTORY="is not shu project/directory. No shu.yaml found"
     ERROR_INDEX_OUT_OF_BOUNDS="index out of bounds"
+    ERROR_NO_HOOKS_FOUND="No hooks found"
+    ERROR_COMMAND_REQUIRES_SHU_PROJECT="this commands only works inside a shu project"
 #}
 
 #shu values that can be overridden by environment variables {
     if [ -z "$SHU_GIT_REPO" ]; then SHU_GIT_REPO="https://github.com/rafael-tonello/SHU.git"; fi
-    if [ -z "$SHU_COMMON_FOLDER_SOURCE" ]; then SHU_COMMON_FOLDER_SOURCE="$SHU_GIT_REPO#src/libs/shu-common"; fi
+    if [ -z "$SHU_COMMON_FOLDER_SOURCE" ]; then SHU_COMMON_FOLDER_SOURCE="$SHU_GIT_REPO#src/libs/common"; fi
 #}
 
-shu.main(){ local cmd="$1";
+shu.detectEnvAndGoRoot(){
+    export SHU_PROJECT_WORK_DIR="$(pwd)"
+    shu.getShuProjectRootDir; local retCode=$?; export SHU_PROJECT_ROOT_DIR="$_r"
+    if [ $retCode -eq 0 ]; then
+        cd "$SHU_PROJECT_ROOT_DIR"
+        shu.yaml.get "shu.yaml" ".name"; export SHU_PROJECT_NAME="$_r"
+    else
+        export SHU_PROJECT_ROOT_DIR=""
+    fi
+}
+
+shu.Main(){ local cmd="$1";
+    shu.detectEnvAndGoRoot
+    local currDir="$SHU_PROJECT_ROOT_DIR" #if a command file calls main, the SHU_PROJECT_* variables could be changed. So, we need to restore the pwd and these variables after run command file
 
     if [[ "$cmd" == "-h" || "$cmd" == "--help"  || $# -eq 0 ]]; then
-        shu.Help
+        shu.Help "$@"
         return 0
     elif [[ "$cmd" == "-v" || "$cmd" == "--version" ]]; then
         echo "Shu CLI version $SHU_VERSION"
         return 0
     fi
     shift;
-
+    
     shu.checkPrerequisites
-    if [ "$_error" != "" ]; then
-        shu.printError "Shu error: $_error"
+    if [ $? -ne 0 ]; then
+        shu.printError "Some dependencies are missing and shu cannot continue: $_error"; _error=""
+        cd "$SHU_PROJECT_WORK_DIR"
         return 1
     fi
 
     local capitalizedCmd=$(echo "$cmd" | awk '{print toupper(substr($0,0,1)) substr($0,2)}')
     _error=""
-    
+
+    #check and run hooks
+    #check if hooks.sh file is available 
+    cd "$SHU_PROJECT_ROOT_DIR"
+    if [ "$SHU_PROJECT_ROOT_DIR" != "" ]; then
+        local shuHooksFile="$shu_scriptDir/commands/hooks.sh"
+        if [ -f "$shuHooksFile" ]; then
+
+            source "$shuHooksFile" "run" "before" "$cmd" "$@"; local retCode=$?
+
+            #if file changes the current directory, and change SHU_PROJECT* variables (by calling shu.Main), restore them
+            cd "$currDir"
+            shu.detectEnvAndGoRoot
+
+            if [[ -n "$_error" && $_error != *"$ERROR_NO_HOOKS_FOUND"* ]]; then
+                shu.printError "Shu error running hooks before command: $_error"; _error=""
+                cd "$SHU_PROJECT_WORK_DIR"
+                return $retCode
+            fi
+        else
+            shu.printYellow "Warning: shu hooks module is missing. File '$shu_scriptDir/commands/hooks.sh' not found. Hooks will not be executed.\n" >/dev/stderr
+        fi
+    fi
+    _error=""
     #check if project contains the command
-    shu.Pcommandexists "$cmd"; local exists="$_r"
+    cd "$SHU_PROJECT_ROOT_DIR"
+    
+    shu.yaml.containsKey "shu.yaml" ".project-commands.$cmd"; local exists="$_r"
     if [ "$exists" == "true" ]; then
         #run the command from the project
-        shu.Pcommandrun "$cmd" "$@"; local retCode=$?
-        if [ "$_error" != "" ]; then
-            shu.printError "Shu error: $_error"
-        fi 
+        if [ ! -f "$shu_scriptDir/commands/pcommands.sh" ]; then
+            shu.printError "Shu error:  Error running project command \"$cmd\": pcommands.sh not found in the commands folder."; _error=""
+        fi
+
+        source "$shu_scriptDir/commands/pcommands.sh" "run" "$cmd" "$@"; local retCode=$?
+        cd "$SHU_PROJECT_WORK_DIR"
+        if [ "$retCode" -ne 0 ]; then
+            shu.printError "Shu error: Error running project command \"$cmd\": $_error"; _error=""
+            return 1
+        fi
         return $retCode
     fi
+    _error=""
 
     local retCode=0
+
     #check if lowercase of capitalizedCmd contains 'Run' or 'run' (do not supress stderr when running scripts using shu)
     if [[ "$capitalizedCmd" == *"Run"* ]]; then
         shu.Run "$@"
@@ -58,230 +109,429 @@ shu.main(){ local cmd="$1";
         retCode=$?
 
         if [ "$_error" != "" ]; then
-            shu.printError "Shu error: $_error"
+            shu.printError "Shu error: $_error"; _error=""
         fi
         return $retCode
     else
-        #check if the folder $shu_scriptFullPath/.shu/packages/shu-common/commands/$cmd.sh exists
+        #check if the folder $shu_scriptFullPath/.shu/packages/common/commands/$cmd.sh exists 
         local commandFile="$shu_scriptDir/commands/$cmd.sh"
         if [ -f "$commandFile" ]; then
             #run the command file
-            source "$commandFile" "$@"
+            source "$commandFile" "$@" 2>/tmp/shu_error.log
             retCode=$?
-            if [ "$retCode" -ne 0 ]; then
+            if [ "$retCode" -ne 0 ] || [ "$_error" != "" ]; then
                 if  [ -f /tmp/shu_error.log ]; then
-                    _error="$_error. $(cat /tmp/shu_error.log)"
+                    _error="$_error $(cat /tmp/shu_error.log)"
                 fi
 
-                shu.printError "Shu error: Error running command '$cmd': $_error"
+                shu.printError "Shu error: Error running command '$cmd': $_error"; _error=""
                 rm -f /tmp/shu_error.log
+                return 1
             fi
             rm -f /tmp/shu_error.log
-            return $retCode
+            cd "$SHU_PROJECT_WORK_DIR"
         else
-            shu.printError "Command '$cmd' not found in your project, nor in the SHU commands. User 'shu pcommand --help' to see the available project commands, or 'shu --help' to see the available SHU commands."
+            shu.printError "Command '$cmd' not found in your project, nor in the SHU commands. User 'shu pcommand --help' to see the available project commands, or 'shu --help' to see the available SHU commands."; _error=""
+            retCode=1
+        fi
+    fi
+
+    #if file changes the current directory, and change SHU_PROJECT* variables (by calling shu.Main), restore them
+    cd "$currDir"
+    shu.detectEnvAndGoRoot
+
+    cd "$SHU_PROJECT_ROOT_DIR"
+    if [ "$SHU_PROJECT_ROOT_DIR" != "" ]; then
+
+        #check if hooks.sh file is available 
+        local shuHooksFile="$shu_scriptDir/commands/hooks.sh"
+        if [ -f "$shuHooksFile" ]; then
+            source "$shuHooksFile" "run" "after" "$cmd" "$@"; local retCode=$?
+            #if file changes the current directory, and change SHU_PROJECT* variables (by calling shu.Main), restore them
+            cd "$currDir"
+            shu.detectEnvAndGoRoot
+
+            if [[ -n "$_error" && $_error != *"$ERROR_NO_HOOKS_FOUND"* ]]; then
+                shu.printError "Shu error running hooks after commnad: $_error"; _error=""
+                cd "$SHU_PROJECT_WORK_DIR"
+                return $retCode
+            fi
+        else
+            shu.printYellow "Warning: shu hooks module is missing. File '$shu_scriptDir/commands/hooks.sh' not found. Hooks will not be executed.\n" >/dev/stderr
+        fi
+    fi
+    _error=""
+    
+    cd "$SHU_PROJECT_WORK_DIR"
+    return 0
+}
+
+#utils functions {
+    shu.checkPrerequisites(){
+        local retCode=0
+        _error=""
+
+        #check if yq is installed
+        if ! command -v yq &> /dev/null; then
+            if [ "$_error" != "" ]; then _error+="+ "; fi
+            _error+="yq is not installed. Please install yq to use Shu (go install github.com/mikefarah/yq/v4@latest). Read more in https://github.com/mikefarah/yq"
+            retoCode=1
+        fi
+
+        #check git
+        if ! command -v git &> /dev/null; then
+            if [ "$_error" != "" ]; then _error+="+ "; fi
+            _error+="git is not installed. Shu needs git to install project dependencies."
             retCode=1
         fi
 
-    fi
-    
-    return 0
-}
+        if ! command -v split &> /dev/null; then
+            if [ "$_error" != "" ]; then _error+="+ "; fi
+            _error+="split is not installed. Shu uses shu."
+            retCode=1
+        fi
 
-shu.checkPrerequisites(){
+        if ! command -v curl &> /dev/null; then
+            if [ "$_error" != "" ]; then _error+="+ "; fi
+            _error+="Curl is not installed. Please install Curl to use Shu."
+            retCode=1
+        fi
 
-    #check if yq is installed
-    if ! command -v yq &> /dev/null; then
-        _error="yq is not installed. Please install yq to use Shu (go install github.com/mikefarah/yq/v4@latest). Read more in https://github.com/mikefarah/yq"
-        return 1
-    fi
+        ##check if jq is installed
+        #if ! command -v jq &> /dev/null; then
+        #    _error="jq is not installed. Please install jq to use Shu."
+        #    return 1
+        #fi
 
-    #check git
-    if ! command -v git &> /dev/null; then
-        _error="git is not installed. Please install git to use Shu."
-        return 1
-    fi
+        return $retCode
+    }
 
-    if ! command -v split &> /dev/null; then
-        _error="split is not installed. Please install split to use Shu."
-        return 1
-    fi
+    shu.printRed(){ local message="$1"; local keepOpened="${2:-}"
+        printf "\033[0;31m$message"
+        if [ "$keepOpened" != "true" ]; then
+            printf "\033[0m"
+        fi
+    }
 
-    ##check if jq is installed
-    #if ! command -v jq &> /dev/null; then
-    #    _error="jq is not installed. Please install jq to use Shu."
-    #    return 1
-    #fi
+    shu.printGreen(){ local message="$1"; local keepOpened="${2:-}"
+        printf "\033[0;32m$message"
+        if [ "$keepOpened" != "true" ]; then
+            printf "\033[0m"
+        fi
+    }
 
-    return 0
-}
+    shu.printYellow(){ local message="$1"; local keepOpened="${2:-}"
+        printf "\033[0;33m$message"
+        if [ "$keepOpened" != "true" ]; then
+            printf "\033[0m"
+        fi
+    }
 
-shu.printRed(){ local message="$1"; local keepOpened="${2:-}"
-    printf "\033[0;31m$message"
-    if [ "$keepOpened" != "true" ]; then
-        printf "\033[0m"
-    fi
-}
+    #prints contextual erros.
+    #erros are nested by ':'
+    #print each erro in a single line
+    #use identation to show nesting
+    shu.printError(){
+        local error="$1"
+        local _currIdentation="$2"
+        local _currPrefix_="${3:-}"
 
-shu.printGreen(){ local message="$1"; local keepOpened="${2:-}"
-    printf "\033[0;32m$message"
-    if [ "$keepOpened" != "true" ]; then
-        printf "\033[0m"
-    fi
-}
+        
+        local currError=""
 
-shu.printError(){
-    local errorMessage="$1";
-    local _allLinesPrefix="${2:-""}"; 
-    local _beginLineText="${3:-"⤷ "}"; 
-    local _endLineText="${4:-""}"; 
-    local _contextSeparator="${5:-": "}";
-
-    local currentPrefix="$_allLinesPrefix"
-    local ret=""
-    local errorPart
-
-    while [ -n "$errorMessage" ]; do
-        if [[ "$errorMessage" == *"$_contextSeparator"* ]]; then
-            errorPart="${errorMessage%%$_contextSeparator*}"  # parte antes do separador
-            errorMessage="${errorMessage#*$_contextSeparator}" # parte depois do separador
+        if [[ "$error" == *": "* ]]; then
+            currError="${error%%: *}"
+            error="${error#*: }"
         else
-            errorPart="$errorMessage"
-            errorMessage=""
+            currError="$error"
+            error=""
         fi
+        shu.printError.printSameLevelError "$currError" "$_currIdentation  " "$_currPrefix_"
+        if [[ -n "$error" ]]; then
+            #change prefix of next errors to ': '
+            shu.printError "$error" "$_currIdentation  " "⤷ "
+        fi
+    }
 
-        if [ -n "$ret" ]; then
-            ret+=$'\n'"$currentPrefix$_beginLineText$errorPart$_endLineText"
+    #same level erros are erros separated by '+' and should be printed in induaviadual lines, but with the same identation
+    shu.printError.printSameLevelError(){
+        local error="$1"
+        local currIdentation="$2"
+        local _prefix_="$3"
+
+        local currError=""
+        if [[ "$error" == *"+ "* ]]; then
+            currError="${error%%"+ "*}"
+            error="${error#*"+ "}"
         else
-            ret+="$currentPrefix$errorPart$_endLineText"
+            currError="$error"
+            error=""
         fi
 
-        currentPrefix+="  "
-    done
-
-    shu.printRed "$ret"$'\n' > /dev/stderr
-}
-
-shu.getShuProjectRoot_relative(){
-    #look for a .shu folder in the current directory (director of script that called misc.Import). If not found, look in the parent, and so on
-    local shuLocation="./"
-    while [ ! -d "$shuLocation/.shu" ] && [ "$shuLocation" != "/" ]; do
-        shuLocation+="../"
-        local realpath="$(realpath "$shuLocation")"
-
-        if [ "$realpath" == "/" ]; then
-            shuLocation="/"
-            break
+        #print to stderr
+        shu.printRed "$currIdentation$_prefix_$currError\n" >&2
+        if [[ -n "$error" ]]; then
+            #change prefix of next errors to '+ '
+            shu.printError.printSameLevelError "$error" "$currIdentation" "+ "
         fi
-    done
+    }
 
-    if [ ! -d "$shuLocation/.shu" ]; then
-        _error="Could not find .shu folder in the current directory or any parent directory"
+    shu.getShuProjectRootDir(){
+        #look for a .shu folder in the current directory (director of script that called misc.Import). If not found, look in the parent, and so on
+        local shuLocation="$(pwd)"
+        while [ ! -f "$shuLocation/shu.yaml" ] && [ "$shuLocation" != "/" ]; do
+            shuLocation="$(dirname "$shuLocation")"
+        done
+
+        if [ ! -f "$shuLocation/shu.yaml" ]; then
+            _error="Could not find .shu folder in the current directory or any parent directory"
+            _r=""
+            return 1
+        fi
+
+        _r="$shuLocation"
+        return 0
+    }
+
+
+    #return _r with a text that can be printed to the console. The line length is 
+    #defined by tput cols, or 80 if tput is not available.
+    #_print ($2) can be used to control if the line should be printed or not. The
+    #default behavior is to print the line (_print = true).
+    shu.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
+        local _length=$(tput cols 2>/dev/null || echo 80)
+        if [ -z "$_length" ] || [ "$_length" -le 0 ]; then
+            _length=80
+        fi
+
+        _r=$(printf "%${_length}s" | tr ' ' "$_char")
+        if [ "$_print" == "true" ]; then
+            printf "%s\n" "$_r"
+        fi
+        return 0
+    }
+
+    shu.separateKv(){
+        #check if $1 contains '=' or ':'
+        local key=$1
+        local value="$2"
+        if [[ "$1" == *"="* ]]; then
+            local key="${1%%=*}"
+            local value="${1#*=}"
+        elif [[ "$1" == *":"* ]]; then
+            local key="${1%%:*}"
+            local value="${1#*:}"
+        fi
+
+        _r=("$key" "$value")
+        _r_key="$key"
+        _r_value="$value"
+        return 0
+    }
+
+    shu.getValueFromArgs(){ local key="$1"; shift
+        #check if key is in the arguments list
+        local index=0
+        local i=0;
+        for (( i=0; i<$#; i++ )); do
+            arg="${!i}"
+            nextArg="${!((i+1))}"
+            if [[ "$arg" == "$key"* ]]; then
+                shu.separateKv "$arg" "$nextArg"; _r="$_r_value"
+                return 0
+            fi
+        done
+
+        _r=""
+        _error="Key '$key' not found in the arguments list"
         return 1
-    fi
-
-    _r="$shuLocation"
-    return 0
-}
-
-
-#return _r with a text that can be printed to the console. The line length is 
-#defined by tput cols, or 80 if tput is not available.
-#_print ($2) can be used to control if the line should be printed or not. The
-#default behavior is to print the line (_print = true).
-shu.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
-    local _length=$(tput cols 2>/dev/null || echo 80)
-    if [ -z "$_length" ] || [ "$_length" -le 0 ]; then
-        _length=80
-    fi
-
-    _r=$(printf "%${_length}s" | tr ' ' "$_char")
-    if [ "$_print" == "true" ]; then
-        printf "%s\n" "$_r"
-    fi
-    return 0
-}
+    }
+#}
 
 #TODO: move files 
 #Shu-cli direct commands (commands with no sub-cli) {
     #Initialize a new Shu project in the current directory by creating a shu.yaml file.
     shu.Init(){ local projectName=${1:-$(basename "$(pwd)")}
         if [ -f "./shu.yaml" ]; then
-            _error="this directory is already a Shu project."
-            return 1
+            shu.printYellow "Warning: This project is already initialized. Redirecting to 'shu restore'.\n"
+            shu.Main restore
+            return $?
         fi
 
         shu.initFolder "$projectName"
-        shu.main touch "$projectName.sh"
-        shu.main mainfiles add "$projectName.sh"
 
-        #TODO: clone miscellaneous to ./shu/packages/shu-common
-        #TODO: create main.sh file
-        #TODO: add 'source ./shu/packages/shu-common/shu-shu.sh' to the main file
+        #check for --template option
+        shu.getValueFromArgs "--template"
+        if [ "$?" -eq 0 ]; then
+            _error=""
+            local template="$_r"
+            local tmpFolder="$(mktemp -d)"
+
+            #check if is a valid git repo
+            local retDir="$(pwd)"
+            cd tempFolder
+            shu.Main init
+
+            #check if template contains 'as <name>'
+            if [[ "$template" =~ as\ ([^ ]+) ]]; then
+                _error="You cannot use 'as <name>' in the template option."
+                return 1
+            fi
+
+            shu.Main pdeps get "$template as shu-template"
+            if [ "$_error" != "" ]; then
+                _error="Error getting template '$template': $_error"
+                return 1
+            fi
+
+            cp -r "$tmpFolder/.shu/packages/shu-template/"* ./
+
+            rm -rf "$tmpFolder"
+
+            #updates project name
+            shu.yaml.set "shu.yaml" ".name" "$projectName"
+        else
+            _error=""
+            shu.Main touch "$projectName.sh"
+            shu.Main mainfiles add "$projectName.sh"
+        fi
 
         echo "Initialized Shu project '$projectName'."
     }
 
     #deletes the .shu folder
     shu.Clean(){
-        shu.main dep clean $@
+        shu.Main pdeps clean $@
     }
 
     #restore all dependencies from shu.yaml. If .shu folder already exists, the process is aborted
     shu.Restore(){
         #send arguments, bcause shu.Deprestore may need them
-        shu.main dep restore $@
+        shu.Main pdeps restore $@
 
-        #do not need to check Cmddeps, because shu.Deprestore already does it
+        #do not need to check sysdepss, because shu.Deprestore already does it
     }
 
     #deletes .shu folder and restores it ('runs shu clean' and 'shu restore')
     shu.Refresh(){
-        shu.main dep clean
-        shu.main dep restore
-    }
-
-    shu.Tests(){
-        shu.main test "$@"
-        return  $?
+        shu.Main pdeps clean
+        shu.Main pdeps restore
     }
 
     shu.Help(){
+        local onlyProject=false
+        if [[ "$@" == *"--project-only"* || "$@" == *"-p"* ]]; then
+            onlyProject=true
+
+            if [ "$SHU_PROJECT_ROOT_DIR" == "" ]; then
+                shu.printError "help with -p/--project-only (show only project commands help) is only available inside a shu project folder."
+                return 1
+            fi
+        fi
+
         local output=""
+        pCommands=()
+        source "$shu_scriptDir/commands/pcommands.sh" "list" '__f(){ local command="$1"; local commandAction="$2"; local description="$3"
+            local commandStrSize=${#command}
+            #if commandStrSize is less than 27
+            if [ $commandStrSize -lt 27 ]; then
+                local spaceCount=$((25 - commandStrSize))
+                pCommands+=("$command$(printf '%*s' $spaceCount '') - $description")
+            else
+                local spaceCount=27
+                pCommands+=("$command")
+                pCommands+=("$(printf '%*s' $spaceCount '') - $description")
+            fi
+        }; __f'
+
         #just reduce the lines above
         helpItem(){ output+=$(shu.printHelpLine "$1"); }
 
-        helpItem "Shu CLI version $SHU_VERSION - A package manager for shellscripting.\n"
-        helpItem "Usage:\n"
-        helpItem "  1) shu <command> [options]\n"
-        helpItem "\n"
-        helpItem "Commands:\n"
-        helpItem "  init [projectName]       - Initialize a new Shu project in the current directory.\n"
-        helpItem "  touch <scriptName>...    - Create a new .sh file with a basic structure.\n"
-        helpItem "  get <urls>...            - Get one or more packages from Git URL and add it to the project. redirects to 'shu dep get <url>' (see int the 'dep' subcommand).\n"
-        helpItem "  clean                    - Remove the .shu folder and all installed packages.\n"
-        helpItem "  restore                  - Restore all dependencies from shu.yaml.\n"
-        helpItem "  refresh                  - Clean and restore all dependencies from shu.yaml.\n"
-        helpItem "  setmain <scriptName>     - Set a script as the main script for the project.\n"
-        helpItem "  run [scriptName]         - Run the main script or a specific script.\n"
-        helpItem "  install <url>            - Install a package from a URL to your system. Note that this command will install to be executed in your system, and not in your project. It is used to install projects written with SHU. Redirects to 'shu installer install'\n"
-        helpItem "  uninstall <packageOrCommandName>\n"
-        helpItem "                           - Uninstall a package or command from your sytem. Note that this command will not operate in your project, but in packages installed in your system via 'shu install'. Redirects to 'shu installer uninstall'\n"
+        helpItem "Shu CLI version $SHU_VERSION - A package manager and project automation system."
+        if $onlyProject; then
+            helpItem " Printing only project commands help.\n"
+        else
+            helpItem "\n"
+        fi
 
-        #list files in 'commands folder
-        files="$(find "$(dirname "$shu_scriptFullPath")/commands" -type f -name "*.sh" )"
-        for file in $files; do
-            #helpItem "\n"
-            while IFS= read -r line; do
-                helpItem "  $line\n"
-            done < <(source "$file" --help)
-        done
-        
-        
-        helpItem "\n\nAdditional information: Virtually, shu can install any git repository to you project.\n"
+        helpItem "$(shu.printGreen Usage):\n"
+        #check if pCommands is empty
+        if [ ${#pCommands[@]} -eq 0 ]; then
+            if $onlyProject; then
+                shu.printError "You are trying to se only project commands help, but project '$SHU_PROJECT_NAME' does not have commands."
+                return
+            else
+                helpItem "  shu <command> [options]\n"
+            fi
+        else
+            if $onlyProject; then
+                helpItem "  shu <project command> [options]\n"
+            else
+                helpItem "  shu <command|project command> [options]\n"
+            fi
+        fi
+
+        if ! $onlyProject; then
+            helpItem "\n"
+            helpItem "$(shu.printGreen "Shu commands"):\n"
+            helpItem "  init [projectName] [options]\n"
+            helpItem "                           - Initialize a new Shu project in the current directory.\n"
+            helpItem "    options:\n"
+            helpItem "      --template \"<url[@<checkout_to>][#<path>][--allow-no-git]>\" [options]\n"
+            helpItem "                             - Use a previus shu project as a template to initialize the current folder. The template can be a git repository, a file URL (zip, 7z, tar.gz, tar.bz2) or a directory. Internaly, this will use 'shu pdeps get' command to get the template.'\n"
+            helpItem "      options:\n"
+            helpItem "        --not-recursive        - Do not restore dependencies of the package.\n"
+            helpItem "      @<checkout_to>         - Shu will checkout the repository to <checkout_to>.\n"
+            helpItem "      #<path>                - Shu will copy only the contents of the specified path (in the repository) to the package folder.\n"
+            helpItem "      --allow-no-git         - allow a no git repository. Shu will try to find it in the filesystem or download it from the web. If a download could be done, the shu will try to extract it if has a supported extension (.zip, .tar.gz, .tar.bz2, .7z).\n"
+            helpItem "  touch <scriptName>...    - Create a new .sh file with a basic structure.\n"
+            helpItem "  get <urls>...            - Get one or more packages from Git URL and add it to the project. redirects to 'shu pdeps get <url>' (see int the 'pdeps' subcommand).\n"
+            helpItem "  clean                    - Remove the .shu folder and all installed packages.\n"
+            helpItem "  restore                  - Restore all dependencies from shu.yaml.\n"
+            helpItem "  refresh                  - Clean and restore all dependencies from shu.yaml.\n"
+            helpItem "  setmain <scriptName>     - Set a script as the main script for the project.\n"
+            helpItem "  run [scriptName]         - Run the main script or a specific script.\n"
+            helpItem "  install <url>            - Install a package from a URL to your system. Note that this command will install to be executed in your system, and not in your project. It is used to install projects written with SHU. Redirects to 'shu installer install'\n"
+            helpItem "  uninstall <packageOrCommandName>\n"
+            helpItem "                           - Uninstall a package or command from your sytem. Note that this command will not operate in your project, but in packages installed in your system via 'shu install'. Redirects to 'shu installer uninstall'\n"
+            
+            #list files in 'commands folder
+            files="$(find "$(dirname "$shu_scriptFullPath")/commands" -type f -name "*.sh" )"
+            for file in $files; do
+                #helpItem "\n"
+                while IFS= read -r line; do
+                    helpItem "  $line\n"
+                done < <(source "$file" --help)
+            done
+        fi
+
+        if [ ${#pCommands[@]} -gt 0 ]; then
+            helpItem "\n"
+
+            local projectNameBold=$(printf "\033[1m%s\033[0m" "$SHU_PROJECT_NAME")
+
+            helpItem "$(shu.printGreen "Project $projectNameBold ")$(shu.printGreen "Commands (commands registered in current shu.yaml file)"):\n"
+            for pCommand in "${pCommands[@]}"; do
+                helpItem "  $pCommand\n"
+            done
+        fi
+
+        if ! $onlyProject; then
+            helpItem "\n\n$(shu.printGreen "Additional information about Shu"):\n" 
+            helpItem "  - Shu initially was focused on shellscripting, but it was changed over the time and, now, shu can work with (almost) any kind of software project, managing packages from git repositories and automating the project with commands, hooks and more.\n"
+            helpItem "  - If you are hooking a command or writing commands for you project, shu exports some variables:\n"
+            helpItem "    - SHU_PROJECT_ROOT_DIR: The root directory of the project. It is the directory where the shu.yaml file is located.\n"
+            helpItem "    - SHU_PROJECT_WORK_DIR: The current working directory of the project\n"
+            helpItem "    - SHU_LAST_DEP_GET_FOLDER: The folder where the last dependency was downloaded. It is only available after the 'shu pdeps get' be execute and is designed to be used in hooks.\n"
+            helpItem "    - SHU_HOOK_INDEX: When running hooks, contains the index of the hook (in the 'shu.xml' hooks list).\n"
+            helpItem "    - SHU_HOOK_WHEN: When running hooks, contains the moment when the hook is being executed (related to the command being executed). Possible values are 'before' and 'after'.\n"
+            helpItem "    - SHU_HOOK_COMMAND_TO_RUN: When running hooks, contains the hooks commnad (your code).\n"
+            helpItem "    - SHU_HOOK_COMMAND_TO_CHECK: When running hooks, contains the shu command that should be evaluated.\n"
+            helpItem "    - SHU_HOOK_RECEIVED_COMMAND: When running hooks, contains the command that is being executed (the command that shu is running).\n"
+            helpItem "    - SHU_BINARY: The path to the shu binary that is being executed. Useful when using shu embedded in a project.\n"
+        fi
 
         printf "$output"
-
     }
 
     #uses tput to get the size of the terminal and prints a help line with the given text.
@@ -301,6 +551,10 @@ shu.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
 
         identPos=$((identPos + 2))
         local terminalWidth=$(tput cols)
+        if [ "$terminalWidth" == "" ] || [ "$terminalWidth" -le 0 ]; then
+            terminalWidth=100
+        fi
+
         local identSpaces="$(printf "%${identPos}s" " ")"
         local maxSizeOfPrintedLines=$((terminalWidth - identPos))
 
@@ -360,7 +614,7 @@ shu.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
             files="$(find "$SHU_PATH/commands" -type f -name "*.sh" )"
             for f in $files; do
                 local cmdName=$(basename "$f" .sh)
-                if [[ "$cmdName" != "shu-cli" && "$cmdName" != "shu-common" ]]; then
+                if [[ "$cmdName" != "shu-cli" && "$cmdName" != "common" ]]; then
                     cmds+="$cmdName "
                 fi
             done
@@ -395,19 +649,19 @@ shu.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
     #changes .bashrc to add ~/.local/shu/bin to PATH if not already present
     #add ~/.local/shu/bin to PATH if not already present
     shu.Install(){
-        shu.main installer install "$@"
+        shu.Main installer install "$@"
     }
 
     shu.Uninstall(){
-        shu.main installer uninstall "$@"
+        shu.Main installer uninstall "$@"
         return $?
     }
 
-    shu.Setmain(){ shu.main mainfiles "$@"; return $?; } #alias for shu.mainFileAdd
+    shu.Setmain(){ shu.Main mainfiles "$@"; return $?; } #alias for shu.MainFileAdd
 
-    shu.Run(){ shu.main mainfiles "$@"; return $?; } #alias for shu.mainFileRun
+    shu.Run(){ shu.Main mainfiles "$@"; return $?; } #alias for shu.MainFileRun
 
-    shu.Get(){ shu.main dep get "$@"; return $?; } #alias for shu.main dep get
+    shu.Get(){ shu.Main pdeps get "$@"; return $?; } #alias for shu.Main pdeps get
 
 
     #internal (private) functions {
@@ -434,7 +688,7 @@ shu.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
                     fi
                 fi
 
-                shu.main dep get "$SHU_COMMON_FOLDER_SOURCE as shu-common" --not-recursive
+                shu.Main pdeps get "$SHU_COMMON_FOLDER_SOURCE as common --not-recursive"
             fi
         }
 
@@ -442,234 +696,106 @@ shu.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
     #}
 #}
 
-#shu project commands {
-
-    #Add a project command.
-    #You can:
-    #   shu Pcommand add <command> <packageName/cmdFile.sh> <information>
-    #   shu Pcommand add <command1> <packageName/cmdFile1.sh> <information1> <command2> <packageName/cmdFile2.sh> <information2> ...
-    #   shu Pcommand add <command1:packageName/cmdFile1.sh:information1> <command2:packageName/cmdFile2.sh:information2> ...
-    shu.Pcommandadd(){
-        shu.initFolder
-
-        local command="$1";
-        local packageAndFile="$2"
-        local information="$3"
-
-        if [[ "$command" =~ ^([^:=]+)[:=](.*)$ ]]; then
-            command="${BASH_REMATCH[1]}"
-            packageAndFile="${BASH_REMATCH[2]}"
-            information="${BASH_REMATCH[3]}"
-            shift 1
-        else
-            shift 3
-        fi
-
-
-        shu._pcmddepadd "$command" "$packageAndFile" "$information"
-        if [ "$_error" != "" ]; then
-            _error="Error adding project command '$command': $_error"
-            return 1
-        fi
-
-        if _r="updated"; then
-            echo "Project command '$command' updated."
-        else
-            echo "Project command '$command' added to project."
-        fi
-
-        #recursive call for remain arguments
-        if [ "$#" -gt 0 ]; then
-            shu.Pcommandadd "$@"
-            if [ "$_error" != "" ]; then _error="Process aborted: $_error"; return 1; fi
-            return $?
-        fi
-
-        _r=""
-        _error=""
-        return 0    
-    }
-
-    shu.Pcommandremove(){ local command="$1"; shift
-        if [ "$command" == "" ]; then
-            _error="No project command name provided. Please provide a command name to remove from pcmds section."
-            return 1
-        fi
-
-        shu.initFolder
-
-        #check if command is in the pcmds section of shu.yaml
-        shu.getPCmdDepIndex "$command"; local index="$_r"
-        if [ "$index" == "-1" ]; then
-            _error="Project command '$command' is not in the pcmds section of shu.yaml. Please provide a valid command name."
-            return 1
-        fi
-
-        #remove command from the pcmds section
-        shu.yaml.removeArrayElement "shu.yaml" ".project-commands" "$index"
-        if [ "$_error" != "" ]; then
-            _error="Error removing project command '$command' from pcmds section of shu.yaml: $_error"
-            return 1
-        fi
-
-        shu.yaml.get "shu.yaml" ".name"; local projectName="$_r"
-        echo "Project command '$command' removed from pcmds section of project '$projectName'."
-        _error=""
-
-        #recursive call for remain arguments
-        if [ "$#" -ne 0 ]; then
-            shu.Pcommandremove "$@"
-            return $?
-        fi
-    }
-
-    shu.Pcommandlist(){
-        shu.initFolder
-
-        #get all project commands from shu.yaml
-        shu.yaml.getArray "shu.yaml" ".project-commands[]"; local pcmds=("${_r[@]}")
-        if [ "$_error" != "" ]; then
-            _error="Error getting project commands from shu.yaml: $_error"
-            return 1
-        fi
-
-        if [ "${#pcmds[@]}" -eq 0 ]; then
-            echo "No project commands found in the project."
-            return 0
-        fi
-
-        echo "Project commands:"
-        for pcmd in "${pcmds[@]}"; do
-            local cmdName=$(echo "$pcmd" | cut -d ':' -f 2)
-            local packageAndPath=$(echo "$pcmd" | cut -d ':' -f 3)
-            local information=$(echo "$pcmd" | cut -d ':' -f 4-)
-
-            echo "- $cmdName: $packageAndPath ($information)"
-        done
-    }
-
-    shu.Pcommandexists(){ local command="$1"
-        if [ "$command" == "" ]; then
-            echo "erro 1"
-            _error="No project command name provided. Please provide a command name to check."
-            _r="false"
-            return 1
-        fi
-
-        #check if command is in the pcmds section of shu.yaml
-        shu.getPCmdDepIndex "$command"; local index="$_r"
-        if [ "$index" == "-1" ]; then
-            _r="false"
-            return 1
-        fi
-
-        echo 33
-
-        _r="true"
-        _error=""
-        return 0
-    }
-
-    #returns _r with 'updated' if command was updated, or empty string if command was added
-    shu._pcmddepadd(){ local command="$1"; local packageAndPath="$2"; local information="$3"
-        if [ "$command" == "" ]; then
-            _error="No project command name provided. Please provide a command name to add to cmddeps section."
-            return 1
-        fi
-
-        if [ "$packageAndPath" == "" ]; then
-            _error="No package name or path provided for project command '$command'."
-            return 1
-        fi
-
-        #check if command is already in the pcmds section of shu.yaml
-        #pcmds is a object, where the key is the command name and the value is the information about the command
-        shu.getPCmdDepIndex "$command"; local index="$_r"
-        local forceUpdate=false
-        if [ "$index" != "-1" ]; then
-            #check if there is --force or -f in the arguments
-            if [[ "$@" == *"--force"* ]] || [[ "$@" == *"-f"* ]]; then
-                shu.yaml.removeArrayElement "shu.yaml" ".project-commands" "$index"
-                if [ "$_error" != "" ]; then
-                    _error="Error updating project command '$command': $_error"
-                    return 1
-                fi
-
-                forceUpdate=true
-            else
-                _error="Project command '$command' is already set in your project. User --force to updates its information."
-                return 1
-            fi
-        fi
-
-        shu.yaml.appendObject "shu.yaml" ".project-commands" "cmd:$command" "path:$packageAndPath" "info:$information"
-        if [ "$_error" != "" ] && [ "$_error" != "$ERROR_AREADY_DONE" ]; then
-            _error="Error adding project command '$command': $_error"
-            return 1
-        fi
-
-        error=""
-        _r=""
-        if [ "$forceUpdate" == "true" ]; then
-            _r="updated"
-        fi
-
-        return 0
-    }
-
-    shu.getPCmdDepIndex(){ local command="$1"
-        #get the index of the command in the cmddeps section of shu.yaml
-        local index=0;
-        while true; do
-            shu.yaml.getArrayObject "shu.yaml" ".project-commands" "$index"; local pcmds=("${_r[@]}")
-            if [ "$_error" == "$ERROR_INDEX_OUT_OF_BOUNDS" ]; then
-                _error=""
-                _r="-1"
-                break;
-            elif [ "$_error" != "" ]; then
-                _error="Error getting project commands from shu.yaml: $_error"
-                _r="-1"
-                return 1
-            fi
-            
-            if [ "${#pcmds[@]}" -eq 0 ]; then
-                _error=""
-                _r="-1"
-                return 0
-            fi
-
-            if [ "${pcmds[0]}" == "cmd:$command" ]; then
-                _error=""
-                _r="$index"
-                return 0
-            fi
-
-            index=$((index + 1))
-        done
-
-        _error=""
-        _r="-1"
-        return 0
-    }
-
-
-#}
-
 #functions for manipulating yaml files {
     #return 0 if the key exists in the yaml file, 1 otherwise. Also sets _r to 'true' or 'false'
-    shu.yaml.containsKey(){ local file="$1"; local key="$2"
+
+    #Set a key: value in the yaml file
+    shu.yaml.set() {
+        local file="$1"
+        local pkey="$2"
+        local value="$3"
+
+        if [[ "$pkey" == .* ]]; then
+            #remove the first dot from the pkey
+            pkey="${pkey:1}"
+        fi
+
         if [ ! -f "$file" ]; then
             _error="File '$file' not found."
             return 1
         fi
 
-        if [[ "$key" == .* ]]; then
-            #remove the first dot from the key
-            key="${key:1}"
+        #check if yq is installed
+        if ! command -v yq &> /dev/null; then
+            _error="yq is not installed. Please install yq (Mike Farah's) to use this function."
+
+            return 1
+        fi
+
+        yq eval -i ".$pkey = \"$value\"" "$file" 2>/tmp/shu-yaml-set-error.log
+        if [ $? -ne 0 ]; then
+            _error="Error setting key '$pkey' to value '$value' in file '$file': $(cat /tmp/shu-yaml-set-error.log)"
+            rm /tmp/shu-yaml-set-error.log
+            return 1
+        fi
+        rm /tmp/shu-yaml-set-error.log
+
+        _error=""
+    }
+
+    #returns, via _r, the value of the key in the yaml file (note that the value can be a list)
+    shu.yaml.get() {
+        local file="$1"
+        local pkey="$2"
+
+        if ! command -v yq &> /dev/null; then
+            _error="yq is not installed. Please install yq (Mike Farah's version in Go)."
+            return 1
+        fi
+
+        if [ ! -f "$file" ]; then
+            _error="File '$file' not found."
+            return 1
+        fi
+
+        if [[ "$pkey" == .* ]]; then
+            pkey="${pkey:1}"
+        fi
+
+        _r=$(yq eval ".${pkey}" "$file")
+        _error=""
+        return 0
+    }
+
+    shu.yaml.remove(){ local file="$1"; local pkey="$2"
+        if [ ! -f "$file" ]; then
+            _error="File '$file' not found."
+            return 1
+        fi
+
+        if [[ "$pkey" == .* ]]; then
+            pkey="${pkey:1}"
         fi
 
         #check if the key exists in the yaml file
-        tmp=$(yq eval ".$key" "$file")
+        if shu.yaml.containsKey "$file" "$pkey"; then
+            yq eval -i "del(.${pkey})" "$file"
+            if [ $? -ne 0 ]; then
+                _error="Error removing key '$pkey' from file '$file'."
+                return 1
+            fi
+        else
+            _error="Key '$pkey' not found in file '$file'."
+            return 1
+        fi
+
+        _error=""
+    }
+
+    #returns _r = true and ret code 0 if the key exists in the yaml file, _r = false and ret code 1 otherwise
+    shu.yaml.containsKey(){ local file="$1"; local pkey="$2"
+        if [ ! -f "$file" ]; then
+            _error="File '$file' not found."
+            return 1
+        fi
+
+        if [[ "$pkey" == .* ]]; then
+            #remove the first dot from the pkey
+            pkey="${pkey:1}"
+        fi
+
+        #check if the pkey exists in the yaml file
+        tmp=$(yq eval ".$pkey" "$file")
         if [ "$tmp" != "null" ]; then
             _r="true"
             _error=""
@@ -680,34 +806,10 @@ shu.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
         fi
     }
 
-    shu.yaml.listContains() {
-        local file="$1"; local key="$2"; local value="$3"
-
-        if [ ! -f "$file" ]; then
-            _error="File '$file' not found."
-            return 1
-        fi
-
-        # check if the key exists in the yaml file
-        if ! shu.yaml.containsKey "$file" "$key"; then
-            _error="Key '$key' not found in file '$file'."
-            return 1
-        fi
-
-        # check if the value exists in the list
-        if yq eval ".\"$key\"[]" "$file" | grep -Fxq "$value"; then
-            _r="true"
-            return 0
-        else
-            _r="false"
-            return 1
-        fi
-    }
-
-    #return an array with key[: value]
-    shu.yaml.listProperties(){ local file="$1"; local key="$2"; local _allwValues="${3:-false}"
+    #return, via _r, a list of 'key: value' pairs from the yaml file.
+    shu.yaml.listProperties(){ local file="$1"; local pkey="$2"; local _allwValues="${3:-false}"
         ret=()
-        shu.yaml.getArray "shu.yaml" "$key | keys | .[]"; local tmpResult=("${_r[@]}")
+        shu.yaml.getArray "shu.yaml" "$pkey | keys | .[]"; local tmpResult=("${_r[@]}")
         if [ "$_error" != "" ]; then
             _error="Error getting properties from yaml file '$file': $_error"
             return 1
@@ -715,7 +817,7 @@ shu.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
 
         for prop in "${tmpResult[@]}"; do
             if [ "$_allwValues" == "true" ]; then
-                shu.yaml.get "shu.yaml" "$key.$prop"; local value="$_r"
+                shu.yaml.get "shu.yaml" "$pkey.$prop"; local value="$_r"
                 ret+=("$prop: $value")
             else
                 ret+=("$prop")
@@ -726,77 +828,68 @@ shu.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
         _r=("${ret[@]}")
     }
 
-    #returns, via _r, the value of the key in the yaml file (note that the value can be a list)
-    shu.yaml.get() {
-        local file="$1"
-        local key="$2"
-
-        if ! command -v yq &> /dev/null; then
-            _error="yq is not installed. Please install yq (Mike Farah's version in Go)."
-            return 1
-        fi
-
+    #append a value to an array in the yaml file. If the key does not exist, it will be created.
+    shu.yaml.addArrayElement(){ local file="$1"; local pkey="$2"; local value="$3"
         if [ ! -f "$file" ]; then
             _error="File '$file' not found."
             return 1
         fi
 
-        if [[ "$key" == .* ]]; then
-            key="${key:1}"
+        if [[ "$pkey" == .* ]]; then
+            #remove the first dot from the pkey
+            pkey="${pkey:1}"
         fi
 
-        _r=$(yq eval ".${key}" "$file")
-        _error=""
-        return 0
-    }
-
-    shu.yaml.getArray() {
-        local file="$1"
-        local key="$2"
-
-        #add the [] to the key if it does not have it
-        if [[ "$key" != *"[]" ]]; then
-            key="$key[]"
+        #check if the key exists in the yaml file
+        if shu.yaml.containsKey "$file" ".$pkey"; then
+            #append the value to the pkey
+            yq eval -i ".$pkey += [\"$value\"]" "$file"
+        else
+            #create the pkey and set the value
+            yq eval -i ".$pkey= [\"$value\"]" "$file"
         fi
 
-        if ! command -v yq &> /dev/null; then
-            _error="yq is not installed. Please install yq (Mike Farah's version in Go)."
+        if [ $? -ne 0 ]; then
+            _error="Error appending value '$value' to key '$pkey' in file '$file'."
             return 1
         fi
-
-        if [ ! -f "$file" ]; then
-            _error="File '$file' not found."
-            return 1
-        fi
-
-        if [[ "$key" == .* ]]; then
-            key="${key:1}"
-        fi
-
-        _r=()
-
-        while IFS= read -r line; do
-            _r+=("$line")
-        done < <(yq eval ".${key}" "$file")
 
         _error=""
-        return 0
     }
 
-    #returns _r with a bash array of string in the format "key:value"
-    shu.yaml.getArrayObject(){ local file="$1"; local key="$2"; local index="$3"
-        if ! command -v yq &> /dev/null; then
-            _error="yq is not installed. Please install yq (Mike Farah's version in Go)."
-            return 1
-        fi
+    shu.yaml.arrayContains() {
+        local file="$1"; local pkey="$2"; local value="$3"
 
         if [ ! -f "$file" ]; then
             _error="File '$file' not found."
             return 1
         fi
 
-        if [[ "$key" == .* ]]; then
-            key="${key:1}"
+        # check if the pkey exists in the yaml file
+        if ! shu.yaml.containsKey "$file" "$pkey"; then
+            _error="Key '$pkey' not found in file '$file'."
+            return 1
+        fi
+
+        # check if the value exists in the list
+        if yq eval ".\"$pkey\"[]" "$file" | grep -Fxq "$value"; then
+            _r="true"
+            return 0
+        else
+            _r="false"
+            return 1
+        fi
+    }
+
+    shu.yaml.getArrayElement(){ local file="$1"; local pkey="$2"; local index="$3"
+        if [ ! -f "$file" ]; then
+            _error="File '$file' not found."
+            return 1
+        fi
+
+        if [[ "$pkey" == .* ]]; then
+            #remove the first dot from the pkey
+            pkey="${pkey:1}"
         fi
 
         # Verifica se o índice é número
@@ -807,36 +900,26 @@ shu.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
 
         # Verifica se o índice é válido
         local arrayLength
-        arrayLength=$(yq eval ".${key} | length" "$file")
+        arrayLength=$(yq eval ".${pkey} | length" "$file")
         if [ "$index" -lt 0 ] || [ "$index" -ge "$arrayLength" ]; then
             _error="$ERROR_INDEX_OUT_OF_BOUNDS"
             return 1
         fi
 
-        # Extrai as keys do objeto no índice
-        local keys
-        mapfile -t keys < <(yq eval ".${key}[$index] | keys[]" "$file")
-
-        # Para cada key, extrai o valor e monta key:value
-        _r=()
-        for k in "${keys[@]}"; do
-            # Remove aspas se houver no k
-            k="${k%\"}"
-            k="${k#\"}"
-
-            local value
-            value=$(yq eval ".${key}[$index].$k" "$file")
-            # Remove aspas do value, se existir
-            value="${value%\"}"
-            value="${value#\"}"
-
-            _r+=("$k:$value")
-        done
+        #check if the key exists in the yaml file
+        if shu.yaml.containsKey "$file" ".$pkey"; then
+            #get the value of the pkey at the index
+            _r=$(yq eval ".${pkey}[${index}]" "$file")
+            if [ $? -ne 0 ]; then
+                _error="Error getting value of key '$pkey' at index '$index' in file '$file'."
+                return 1
+            fi
+        else
+            _error="Key '$pkey' not found in file '$file'."
+            return 1
+        fi
 
         _error=""
-        return 0
-        
-
     }
 
     shu.yaml.removeArrayElement() {
@@ -871,7 +954,46 @@ shu.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
         return 0
     }
 
-    shu.yaml.appendObject() {
+    #returns _r with a list of values of an array in the yaml file.
+    shu.yaml.getArray() {
+        local file="$1"
+        local pkey="$2"
+
+        #add the [] to the pkey if it does not have it
+        if [[ "$pkey" != *"[]" ]]; then
+            pkey="$pkey[]"
+        fi
+
+        if ! command -v yq &> /dev/null; then
+            _error="yq is not installed. Please install yq (Mike Farah's version in Go)."
+            return 1
+        fi
+
+        if [ ! -f "$file" ]; then
+            _error="File '$file' not found."
+            return 1
+        fi
+
+        if [[ "$pkey" == .* ]]; then
+            pkey="${pkey:1}"
+        fi
+
+        _r=()
+
+
+        while IFS= read -r line; do
+            _r+=("$line")
+        done < <(yq eval ".${pkey}" "$file" 2>/dev/null)
+
+        _error=""
+        return 0
+    }
+    
+#}
+
+    #append an object to an array in the yaml file. If the key does not exist, it will be created.
+    #appendObjectToArray <file> <arrayKey> <key1:value1> <key2:value2> ...
+    shu.yaml.appendObjectToArray() {
         local file="$1"
         local arrayKey="$2"
         shift 2
@@ -894,120 +1016,104 @@ shu.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
         local json_obj="{"
         local first=1
         for kv in "$@"; do
-            local key="${kv%%:*}"
+            local pkey="${kv%%:*}"
             local value="${kv#*:}"
             # Adiciona vírgula para todos menos o primeiro
             if [ $first -eq 0 ]; then
                 json_obj+=","
             fi
-            # Escapa aspas simples no valor e monta par chave: valor string
-            value=${value//\'/\'\\\'\'}
-            json_obj+="\"$key\":\"$value\""
+            # Escapa aspas duplas no valor e monta par chave: valor string
+            value="${value//\"/\\\"}"  # Escapa aspas duplas
+            json_obj+="\"$pkey\":\"$value\""
             first=0
         done
         json_obj+="}"
 
         # Garante que a chave é uma lista (cria se não existir)
-        yq eval "if .${arrayKey} == null or .${arrayKey} | type != \"!!seq\" then .${arrayKey} = [] else . end" -i "$file"
+        #yq eval "if .${arrayKey} == null or .${arrayKey} | type != \"!!seq\" then .${arrayKey} = [] else . end" -i "$file"
 
         # Adiciona o objeto ao array
         yq eval ".${arrayKey} += [${json_obj}]" -i "$file"
     }
 
-    #erase the value of the key in the yaml file and set it to the value provided
-    shu.yaml.set() {
-        local file="$1"
-        local key="$2"
-        local value="$3"
 
-        if [[ "$key" == .* ]]; then
-            #remove the first dot from the key
-            key="${key:1}"
-        fi
-
-        if [ ! -f "$file" ]; then
-            _error="File '$file' not found."
-            return 1
-        fi
-
-        #check if yq is installed
+    #returns _r with a associative array of pkeys and values
+    shu.yaml.getObjectFromArray(){ local file="$1"; local pkey="$2"; local index="$3"
         if ! command -v yq &> /dev/null; then
-            _error="yq is not installed. Please install yq (Mike Farah's) to use this function."
-
+            _error="yq is not installed. Please install yq (Mike Farah's version in Go)."
             return 1
         fi
 
-        yq eval -i ".$key = \"$value\"" "$file" 2>/tmp/shu-yaml-set-error.log
-        if [ $? -ne 0 ]; then
-            _error="Error setting key '$key' to value '$value' in file '$file': $(cat /tmp/shu-yaml-set-error.log)"
-            rm /tmp/shu-yaml-set-error.log
-            return 1
-        fi
-        rm /tmp/shu-yaml-set-error.log
-
-        _error=""
-    }
-
-    #append a value to the key in the yaml file. If the key does not exist, it will be created.
-    shu.yaml.append(){ local file="$1"; local key="$2"; local value="$3"
         if [ ! -f "$file" ]; then
             _error="File '$file' not found."
             return 1
         fi
 
-        #check if the key exists in the yaml file
-        if shu.yaml.containsKey "$file" "$key"; then
-            #append the value to the key
-            yq eval -i "$key += [\"$value\"]" "$file"
-        else
-            #create the key and set the value
-            yq eval -i "$key= [\"$value\"]" "$file"
+        if [[ "$pkey" == .* ]]; then
+            pkey="${pkey:1}"
         fi
 
-        if [[ "$key" == .* ]]; then
-            #remove the first dot from the key
-            key="${key:1}"
-        fi
-
-        if [ $? -ne 0 ]; then
-            _error="Error appending value '$value' to key '$key' in file '$file'."
+        # Verifica se o índice é número
+        if ! [[ "$index" =~ ^[0-9]+$ ]]; then
+            _error="Index must be a non-negative integer."
             return 1
         fi
+
+        # Verifica se o índice é válido
+        local arrayLength
+        arrayLength=$(yq eval ".${pkey} | length" "$file")
+        if [ "$index" -lt 0 ] || [ "$index" -ge "$arrayLength" ]; then
+            _error="$ERROR_INDEX_OUT_OF_BOUNDS"
+            return 1
+        fi
+
+        # Extrai as keys do objeto no índice
+        local keys
+        mapfile -t keys < <(yq eval ".${pkey}[$index] | keys[]" "$file")
+
+        #declare an associative array to store the key-value pairs
+        unset -v _r
+        unset _r
+        declare -Ag _r
+        for k in "${keys[@]}"; do
+            # Remove aspas se houver no k
+            k="${k%\"}"
+            k="${k#\"}"
+
+            local value
+            value=$(yq eval ".${pkey}[$index].$k" "$file")
+            # Remove aspas do value, se existir
+            value="${value%\"}"
+            value="${value#\"}"
+
+            _r["$k"]="$value"
+        done
 
         _error=""
+        return 0
     }
 
-    shu.yaml.remove(){ local file="$1"; local key="$2"
-        if [ ! -f "$file" ]; then
-            _error="File '$file' not found."
-            return 1
-        fi
-
-        #check if the key exists in the yaml file
-        if shu.yaml.containsKey "$file" "$key"; then
-            yq eval -i "del(.${key})" "$file"
-            if [ $? -ne 0 ]; then
-                _error="Error removing key '$key' from file '$file'."
-                return 1
-            fi
-        else
-            _error="Key '$key' not found in file '$file'."
-            return 1
-        fi
-
-        _error=""
-    }
-#}
-
+    
+    
 
 # Se o script estiver sendo *sourced*, registre o autocompletion
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
     complete -F _shu_autocomplete shu
     export SHU_PATH="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
     return
-
 fi
 
 
-shu.main "$@"; retCode=$?
+#Debug helping (integrattes with vscode launch.json and tasks.json): 
+if [[ "$1" == "--debug-read-from-file" ]]; then
+    #read first line from the file specified in the second argument
+    firstLine=$(head -n 1 "$2")
+    secondLine=$(head -n 2 "$2" | tail -n 1)
+    cd "$firstLine"
+    
+    eval "shu.Main $secondLine"; retCode=$?
+    exit $retCode
+fi
+
+shu.Main "$@"; retCode=$?
 exit $retCode
