@@ -70,7 +70,7 @@ shu.installer.Install(){ local url="$1"; shift
     fi
 
     cd "$HOME/.local/shu/installed"
-    shu.main cmddep check
+    shu.Main psysdeps check
     #go back
     cd -
     if [ "$_error" != "" ]; then
@@ -135,6 +135,44 @@ shu.installer.Uninstall(){ local packageOrCommandName="$1"; shift
     _erro=""
     return 0
 }
+
+shu.installer.preinstallscripts.add(){
+    :;
+}
+
+shu.installer.preinstallscripts.list(){
+    :;
+}
+
+shu.installer.preinstallscripts.remove(){
+    :;
+}
+
+shu.installer.postinstallscripts.add(){
+    :;
+}
+
+shu.installer.postinstallscripts.list(){
+    :;
+}
+
+shu.installer.postinstallscripts.remove(){
+    :;
+}
+
+shu.installer.preuninstallscripts.add(){
+    :;
+}
+
+shu.installer.preuninstallscripts.list(){
+    :;
+}
+
+shu.installer.preuninstallscripts.remove(){
+    :;
+}
+
+
 
 shu.installer.main "$@"
 return $?

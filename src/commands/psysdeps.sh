@@ -1,62 +1,67 @@
 #!/bin/bash
 
-shu.CmdDep.Main(){
+shu.psysdeps.Main(){
     if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-        shu.CmdDep.Help
+        shu.psysdeps.Help
         return 0
     fi
+    
+    if [ "$SHU_PROJECT_ROOT_DIR" == "" ]; then
+        _error="$ERROR_COMMAND_REQUIRES_SHU_PROJECT"
+        return 1
+    fi
+    
 
     local func=$(echo "$1" | awk '{print toupper(substr($0,0,1)) substr($0,2)}')
     shift
-    "shu.CmdDep.$func" "$@"
+    "shu.psysdeps.$func" "$@"
 }
 
-shu.CmdDep.BashCompletion(){
+shu.psysdeps.BashCompletion(){
     _r=("add" "remove" "list" "check")
 }
 
-shu.CmdDep.Help(){
-    echo "cmddep <subcommand>      - commands to inform commands needed to project work correctly."
+shu.psysdeps.Help(){
+    echo "psysdeps <subcommand>      - Informs system commands needed to project work correctly."
     echo "  subcommands:"
     echo "    add <commandName> [options]"
-    echo "                         - Add a command to the cmddeps section of shu.yaml."
+    echo "                           - Add a command to the sysdepss section of shu.yaml."
     echo "      options:"
-    echo "        --force, -f      - force to command to be added. It will override the existing (will update) command."
-    echo "    remove <commandName> - Remove a command from the cmddeps section of shu.yaml."
-    echo "    list [options]       - List all commands in the cmddeps section of shu.yaml."
+    echo "        --force, -f          - force to command to be added. It will override the existing (will update) command."
+    echo "    remove <commandName>   - Remove a command from the sysdepss section of shu.yaml."
+    echo "    list [options]         - List all commands in the sysdepss section of shu.yaml."
     echo "      options:"
     echo "        --level, -l <level>"
-    echo "                         - specify the level of dependencies to scan. default is 0 (no limits)"
-    echo "                           examples:"
-    echo "                             |-0 - all dependencies of all packages and the current project;"
-    echo "                             |-1 - only the current project;"
-    echo "                             |-2 - current project and its dependencies;"
-    echo "                             |-3 - current project and its dependencies and their dependencies, etc;"
-    echo "                             |-N - current project and its dependencies and their dependencies and so on, up to N levels;"
-    echo "        --names, -n      - only show the names of the dependencies"
-    echo "        --subfolders, -sf"
-    echo "                         - include subfolders in the list (default: false). If false, only .shu/packages and its sub-.shu/packages will be scanned. If true, other folders besides .shu/packages will be scanned."
+    echo "                             - specify the level of dependencies to scan. default is 0 (no limits)"
+    echo "                               examples:"
+    echo "                                 |-0 - all dependencies of all packages and the current project;"
+    echo "                                 |-1 - only the current project;"
+    echo "                                 |-2 - current project and its dependencies;"
+    echo "                                 |-3 - current project and its dependencies and their dependencies, etc;"
+    echo "                                 |-N - current project and its dependencies and their dependencies and so on, up to N levels;"
+    echo "        --names, -n          - only show the names of the dependencies"
+    echo "        --subfolders, -sf    - include subfolders in the list (default: false). If false, only .shu/packages and its sub-.shu/packages will be scanned. If true, other folders besides .shu/packages will be scanned."
 }
 
 #add a command depenency to the project.
 #
 #You can:
-#   shu cmddep add <command> <information>  add a command dependency with the given command name 
+#   shu psysdeps add <command> <information>  add a command dependency with the given command name 
 #                                           and information
 #
-#   shu cmddep add <command1> <information1> <command2> <information2> ... 
+#   shu psysdeps add <command1> <information1> <command2> <information2> ... 
 #                                           add multiple command dependencies with the given command 
 #                                           names and information
 #
-#   shu cmddep add <command1:information1> <command2:information2> ... -> 
+#   shu psysdeps add <command1:information1> <command2:information2> ... -> 
 #                                           add multiple command dependencies with the given command
 #                                           names and information, where each command is a key-value
 #                                           pair separated by ':' or '='
 #
 #You cannot do:
-#   shu cmddep add <command1> <command2>    Mistake. Will use command2 as information for command1, 
+#   shu psysdeps add <command1> <command2>    Mistake. Will use command2 as information for command1, 
 #                                           which is not what you want.
-shu.CmdDep.Add(){
+shu.psysdeps.Add(){
     if [ "$#" -eq 0 ]; then
         _error="No command name provided. Please provide a command name to add."
         return 1
@@ -87,21 +92,21 @@ shu.CmdDep.Add(){
         return 0
     fi
 
-    shu._cmddepadd "$command" "$information" $forceUpdate
+    shu._sysdepsadd "$command" "$information" $forceUpdate
     if [ "$_error" != "" ]; then
         _error="Error adding command '$command': $_error"
         return 1
     fi
 
     if _r="updated"; then
-        echo "Command '$command' updated in cmddeps section of shu.yaml."
+        echo "Command '$command' updated in sysdepss section of shu.yaml."
     else
-        echo "Command '$command' added to cmddeps section of shu.yaml."
+        echo "Command '$command' added to sysdepss section of shu.yaml."
     fi
 
     #recursive call for remain arguments
     if [ "$#" -gt 0 ]; then
-        shu.CmdDep.Add "$@"
+        shu.psysdeps.Add "$@"
         if [ "$_error" != "" ]; then _error="Process aborted: $_error"; return 1; fi
         return $?
     fi
@@ -113,9 +118,9 @@ shu.CmdDep.Add(){
 
 
 
-#List necessary commands for the project. List cmddeps from current project and from its dependencies, and dependencies of dependencies, etc.
+#List necessary commands for the project. List sysdepss from current project and from its dependencies, and dependencies of dependencies, etc.
 #Ipmortant, should scan all from dependencies (or use --level, -l to specify the level of dependencies to scan)#
-#Cmddeplist [options]
+#sysdepslist [options]
 #Options:
 #   --level, -l <level>  : specify the level of dependencies to scan (default: 0):
 #                           0 - all dependencies of all packages and the current project,
@@ -125,50 +130,41 @@ shu.CmdDep.Add(){
 #                           N - current project and its dependencies and their dependencies and so on, up to N levels.
 #   --names, -n          : only show the names of the dependencies
 #   --subfolders, -sf    : include subfolders in the list (default: false). If false, only .shu/packages and its sub-.shu/packages will be scanned
-shu.CmdDep.List(){
+shu.psysdeps.List(){
     shu.getArgByName "--level -l" "1" "$@"; local level="$_r"
     shu.getArgByName "--onlynames -on" false "$@"; local onlyNames="$_r"  
     shu.getArgByName "--subfolders -sf" false "$@"; local subFolders="$_r"
     _error=""
 
-    local retFolder="$(pwd)"
-    shu.getShuProjectRoot_relative; local projectRoot="$_r"
+    shu._listCurrFolderssysdepss "$level" 1; local result=("${_r[@]}")
     if [ "$_error" != "" ]; then
-        _error="Error getting shu project root: $_error"
+        _error="Error listing sysdepss: $_error"
         return 1
     fi
 
-    cd "$projectRoot"
-    shu._listCurrFoldersCmdDeps "$level" 1; local result=("${_r[@]}")
-    cd "$retFolder"
-    if [ "$_error" != "" ]; then
-        _error="Error listing cmddeps: $_error"
-        return 1
-    fi
-
-    echo "Project command dependencies:"
     for item in "${result[@]}"; do
-            echo "  - $item"
+        echo "$item"
     done
 }
 
 #Check if commands are available in the system.
 #Ipmortant, should scan all from dependencies (or use --level, -l to specify the level of dependencies to scan)
-#User Cmddeplist to get litst
-shu.CmdDep.Check(){
-    echo "Checking commands in cmddeps section of shu.yaml:"
-    shu.CmdDep.List "$@"; local deps=("${_r[@]}")
+#User sysdepslist to get litst
+shu.psysdeps.Check(){
+    echo "Checking system commands dependencies for your project:"
+    shu.psysdeps.List "$@" > /dev/null; local pdeps=("${_r[@]}")
     if [ "$_error" != "" ]; then
-        _error="Error listing cmddeps: $_error"
+        _error="Error listing sysdepss: $_error"
         return 1
     fi
-    if [ "${#deps[@]}" -eq 0 ]; then
-        echo "No commands found in cmddeps section of shu.yaml."
+    
+    if [ "${#pdeps[@]}" -eq 0 ]; then
+        echo "No system commands dependencies found."
         return 0
     fi
 
     local missing=()
-    for dep in "${deps[@]}"; do
+    for dep in "${pdeps[@]}"; do
         local cmdName=$(echo "$dep" | cut -d ':' -f 1)
         local description=$(echo "$dep" | cut -d ':' -f 2-)
 
@@ -197,59 +193,58 @@ shu.CmdDep.Check(){
 
 #remove a command dependency from the project.
 #Note: it cannot remove a command dependency form dependencies, only from the main project.
-shu.CmdDep.Remove(){ local command="$1"; shift
+shu.psysdeps.Remove(){ local command="$1"; shift
     if [ "$command" == "" ]; then
-        _error="No command name provided. Please provide a command name to remove from cmddeps section."
+        _error="No command name provided. Please provide a command name to remove from sysdepss section."
         return 1
     fi
 
     shu.initFolder
 
-    #check if command is in the cmddeps section of shu.yaml
-    shu.getCmdDepIndex "$command"; local index="$_r"
+    #check if command is in the sysdepss section of shu.yaml
+    shu.getsysdepsIndex "$command"; local index="$_r"
     if [ "$index" == "-1" ]; then
-        _error="Command '$command' is not in the cmddeps section of shu.yaml. Please provide a valid command name."
+        _error="Command '$command' is not in the sysdepss section of shu.yaml. Please provide a valid command name."
         return 1
     fi
 
-    #remove command from the cmddeps section
-    shu.yaml.removeArrayElement "shu.yaml" ".cmddeps" "$index"
+    #remove command from the sysdepss section
+    shu.yaml.removeArrayElement "shu.yaml" ".sysdepss" "$index"
     if [ "$_error" != "" ]; then
-        _error="Error removing command '$command' from cmddeps section of shu.yaml: $_error"
+        _error="Error removing command '$command' from sysdepss section of shu.yaml: $_error"
         return 1
     fi
 
-    shu.yaml.get "shu.yaml" ".name"; local projectName="$_r"
-    echo "Command '$command' removed from cmddeps section of project '$projectName'."
+    echo "Command '$command' removed from sysdepss section of project '$SHU_PROJECT_NAME'."
     _error=""
 
     #recursive call for remain arguments
     if [ "$#" -ne 0 ]; then
-        shu.CmdDep.Remove "$@"
+        shu.psysdeps.Remove "$@"
         return $?
     fi
 }
 
 #returns _r with 'updated' if command was updated, or empty string if command was added
-shu._cmddepadd(){ local command="$1"; local information="$2"; local _forceUpdate="${3:-false}"
+shu._sysdepsadd(){ local command="$1"; local information="$2"; local _forceUpdate="${3:-false}"
     if [ "$command" == "" ]; then
-        _error="No command name provided. Please provide a command name to add to cmddeps section."
+        _error="No command name provided. Please provide a command name to add to sysdepss section."
         return 1
     fi
 
-    #check if command is already in the cmddeps section of shu.yaml
-    #cmddeps is a object, where the key is the command name and the value is the information about the command
-    shu.getCmdDepIndex "$command"; local index="$_r"
+    #check if command is already in the sysdepss section of shu.yaml
+    #sysdepss is a object, where the key is the command name and the value is the information about the command
+    shu.getsysdepsIndex "$command"; local index="$_r"
     if [ "$index" != "-1" ]; then
         #check if there is --force or -f in the arguments
         if $_forceUpdate; then
-            shu.yaml.removeArrayElement "shu.yaml" ".cmddeps" "$index"
+            shu.yaml.removeArrayElement "shu.yaml" ".sysdepss" "$index"
             if [ "$_error" != "" ]; then
-                _error="Error updating command '$command' from cmddeps section of shu.yaml: $_error"
+                _error="Error updating command '$command' from sysdepss section of shu.yaml: $_error"
                 return 1
             fi
         else
-            _error="Command '$command' is already in the cmddeps section of shu.yaml. Please provide a different command name."
+            _error="Command '$command' is already in the sysdepss section of shu.yaml. Please provide a different command name."
             return 1
         fi
     fi
@@ -259,9 +254,9 @@ shu._cmddepadd(){ local command="$1"; local information="$2"; local _forceUpdate
         information="No information provided."
     fi
 
-    shu.yaml.appendObject "shu.yaml" ".cmddeps" "cmd:$command" "info:$information" > /dev/null 2>&1
+    shu.yaml.appendObjectToArray "shu.yaml" ".sysdepss" "cmd:$command" "info:$information" > /dev/null 2>&1
     if [ "$_error" != "" ] && [ "$_error" != "$ERROR_AREADY_DONE" ]; then
-        _error="Error adding command '$command' to cmddeps section of shu.yaml: $_error"
+        _error="Error adding command '$command' to sysdepss section of shu.yaml: $_error"
         return 1
     fi
 
@@ -300,30 +295,35 @@ shu.getArgByName(){ local possibleNames="$1"; local defaultValue="$2"; shift 2
 }
 
 #scroll through current folder and its subfolders (if allowNotShuSubFolders is true) and looks for shu.yaml files.
-#For each shu.yaml file, it will get the cmddeps section and return the list of commands in the cmddeps section.
-shu._listCurrFoldersCmdDeps(){ local maxLevel=$1; local allowNotShuSubFolders=$2; local onlyNames=${3:-false}; local currLevel=$4
+#For each shu.yaml file, it will get the sysdepss section and return the list of commands in the sysdepss section.
+shu._listCurrFolderssysdepss(){ local maxLevel=$1; local allowNotShuSubFolders=$2; local onlyNames=${3:-false}; local currLevel=$4
     local ret=()
     local foundCmds=();
     if [ -f './shu.yaml' ]; then
         local index=-1
         while true; do
             index=$((index + 1))
-            shu.yaml.getArrayObject "shu.yaml" ".cmddeps" "$index"; local cmdDep=("${_r[@]}")
+            shu.yaml.getObjectFromArray "shu.yaml" ".sysdepss" "$index";
+            
+            declare -A psysdeps
+            for k in "${!_r[@]}"; do
+                psysdeps["$k"]="${_r[$k]}"
+            done
+
             if [ "$_error" == "$ERROR_INDEX_OUT_OF_BOUNDS" ]; then
                 _error=""
                 break;
             fi
 
             if [ "$_error" != "" ]; then
-                _error="Error getting cmddeps from shu.yaml: $_error"
+                _error="Error getting sysdepss from shu.yaml: $_error"
                 return 1
             fi
 
-            local cmdName=$(echo "${cmdDep[0]}" | cut -d ':' -f 2)
-            local cmdDesc=$(echo "${cmdDep[1]}" | cut -d ':' -f 2)
+            local cmdName=${psysdeps["cmd"]}
+            local cmdDesk=${psysdeps["info"]}
 
             #find index of $cmdName in foundCmds
-            #local cmdIndex=$(printf "%s\n" "${foundCmds[@]}" | grep -n "^$cmdName" | cut -d ':' -f 1)
             local cmdIndex=$(printf "%s\n" "${foundCmds[@]}" | grep -n -x -F "$cmdName" | cut -d: -f1)
             cmdIndex=$((cmdIndex - 1)) #convert to zero-based index
             if [[ "$cmdIndex" != "" && "$cmdIndex" != "-1" ]]; then
@@ -360,9 +360,9 @@ shu._listCurrFoldersCmdDeps(){ local maxLevel=$1; local allowNotShuSubFolders=$2
 
         #check if current folder is '.shu' or allowNotShuSubFolders="true"
         if [ "$subFolder" == "./.shu" ] || [ "$allowNotShuSubFolders" == "true" ]; then
-            shu._listCurrFoldersCmdDeps "$maxLevel" "$allowNotShuSubFolders" "$onlyNames" $((currLevel + 1))
+            shu._listCurrFolderssysdepss "$maxLevel" "$allowNotShuSubFolders" "$onlyNames" $((currLevel + 1))
             if [ "$_error" != "" ]; then
-                _error="Error listing cmddeps in subfolder '$subFolder': $_error"
+                _error="Error listing sysdepss in subfolder '$subFolder': $_error"
                 return 1
             fi
 
@@ -386,17 +386,23 @@ shu._listCurrFoldersCmdDeps(){ local maxLevel=$1; local allowNotShuSubFolders=$2
     return 0
 }
 
-shu.getCmdDepIndex(){ local command="$1"
-    #get the index of the command in the cmddeps section of shu.yaml
+shu.getsysdepsIndex(){ local command="$1"
+    #get the index of the command in the sysdepss section of shu.yaml
     local index=0;
     while true; do
-        shu.yaml.getArrayObject "shu.yaml" ".cmddeps" "$index"; local cmdDep=("${_r[@]}")
+        shu.yaml.getObjectFromArray "shu.yaml" ".sysdepss" "$index"
+        declare -A psysdeps
+        for k in "${!_r[@]}"; do
+            psysdeps["$k"]="${_r[$k]}"
+        done
+
         if [ "$_error" == "$ERROR_INDEX_OUT_OF_BOUNDS" ]; then
             _error=""
             break;
         fi
 
-        if [ "${cmdDep[0]}" == "cmd:$command" ]; then
+        local cmdName=${psysdeps["cmd"]}
+        if [ "$cmdName" == "$command" ]; then
             _error=""
             _r="$index"
             return 0
@@ -410,5 +416,5 @@ shu.getCmdDepIndex(){ local command="$1"
     return 0
 }
 
-shu.CmdDep.Main "$@"; local retCode="$?"
+shu.psysdeps.Main "$@"; local retCode="$?"
 return $retCode

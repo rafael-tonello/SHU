@@ -3,7 +3,7 @@
 shu.Build(){ local _destinationName="${1:-}"
     if [ "$_destinationName" == "" ]; then
         #get project name from shu.yaml
-        shu.yaml.get "shu.yaml" ".name"; local _destinationName="$_r"
+        _destinationName="$SHU_PROJECT_NAME"
     fi
 
     #add .sh to _destinationName (if not already present)
@@ -94,7 +94,7 @@ shu.Build(){ local _destinationName="${1:-}"
 
 #help is the SHU-cli command
 shu.Build.Help(){
-    :;
+    echo "build                    - Build a shellscript project. Compile the project in a single .sh file. This command is focused on shellscript projects, and you can override it through 'shu pcommand' subcommands. See 'shu pcommand --help' for more information."
 }
 
 if [[ "$1" == "--help" || "$1" == "-h" || "$1" == "help"  ]]; then

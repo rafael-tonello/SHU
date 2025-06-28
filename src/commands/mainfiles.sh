@@ -34,26 +34,25 @@ shu.MainFiles.Add(){ local scriptName="$1"; shift
         return 1
     fi
     
-    #check if file is already added to the 'main' section of shu.yaml (user shu.yaml.listContains)
-    shu.yaml.listContains "shu.yaml" ".main" "$scriptName"
+    #check if file is already added to the 'main' section of shu.yaml (user shu.yaml.arrayContains)
+    shu.yaml.arrayContains "shu.yaml" ".main" "$scriptName"
     if [ "$_r" == "true" ]; then
         _error="Script '$scriptName' is already set as main. Please provide a different script name."
         return 1
     fi
 
     #add script to the main section
-    shu.yaml.append "shu.yaml" ".main" "$scriptName"
+    shu.yaml.addArrayElement "shu.yaml" ".main" "$scriptName"
     if [ "$_error" != "" ]; then
         _error="Error adding script '$scriptName' to main section of shu.yaml: $_error"
         return 1
     fi
 
-    shu.yaml.get "shu.yaml" ".name"; local projectName="$_r"
-    echo "Script '$scriptName' set as a main script for project '$projectName'."
+    echo "Script '$scriptName' set as a main script for project '$SHU_PROJECT_NAME'."
 
     #recursive call to process remain arguments
     if [ "$#" -gt 0 ]; then
-        shu.mainFileAdd "$@"
+        shu.MainFileAdd "$@"
         if [ "$_error" != "" ]; then _error="Process aborted: $_error"; return 1; fi
         return $?
     fi
@@ -109,7 +108,7 @@ shu.MainFiles.Remove(){ local scriptName="$1"; shift
     shu.initFolder
 
     #check if script is in the main section of shu.yaml
-    shu.mainfiles.getMainFileIndex "$scriptName"; local index="$_r"
+    shu.Mainfiles.getMainFileIndex "$scriptName"; local index="$_r"
     if [ "$_index" == "-1" ]; then
         _error="Script '$scriptName' not found in the main section of shu.yaml. Please provide a valid script name."
         return 1
@@ -123,7 +122,7 @@ shu.MainFiles.Remove(){ local scriptName="$1"; shift
 
     #recursive call to process remain arguments
     if [ "$#" -gt 0 ]; then
-        shu.mainFileRemove "$@"
+        shu.MainFileRemove "$@"
         if [ "$_error" != "" ]; then _error="Process aborted: $_error"; return 1; fi
         return $?
     fi
@@ -144,13 +143,12 @@ shu.MainFiles.List(){
         return 0
     fi
 
-    echo "Project main scripts:"
     for script in "${mainScripts[@]}"; do
-        echo "- $script"
+        echo "$script"
     done
 }
 
-shu.mainfiles.getMainFileIndex(){ local scriptName="$1"; shift
+shu.Mainfiles.getMainFileIndex(){ local scriptName="$1"; shift
     shu.yaml.getArray "shu.yaml" ".main[]"; local mainScripts=("${_r[@]}")
     echo "mainScripts: ${mainScripts[@]}"
 
@@ -199,10 +197,10 @@ shu.runScript(){ local scriptName="$1"; shift
 shu.MainFiles.Help(){
     echo "mainfile <subcommand>    - Commands to manage main scripts of the project"
     echo "  subcommands:"
-    echo "    add <scriptNames>... - Add scripts to the main section of shu.yaml."
+    echo "    add <scriptNames>...     - Add scripts to the main section of shu.yaml."
     echo "    remove <scriptNames>..."
-    echo "                         - Remove scripts from the main section of shu.yaml."
-    echo "  list                   - List all scripts in the main section of shu.yaml."
+    echo "                             - Remove scripts from the main section of shu.yaml."
+    echo "  list                     - List all scripts in the main section of shu.yaml."
 }
 
 shu.MainFiles.Main "$@"
