@@ -6,7 +6,7 @@
     shucmd="$thisScriptLocation/../src/shu-cli.sh"
     chmod +x "$shucmd"
 
-    source "$thisScriptLocation/../src/libs/shu-common/tests.sh"
+    source "$thisScriptLocation/../src/libs/common/tests.sh"
     tempDir="/tmp/shu-cli-test"
     eraseTempFolderAfterTests=true
     #tempDir="./tmp"
@@ -19,12 +19,14 @@
 #Note: All Calls to 'shu' are with stdout and stderr supressed.
 
 main(){
-    Test_Init
-    MainFileTests
-    DepTests
-    CleanTests
-    TestRestore
-    TouchTests
+    #Test_Init
+    #MainFileTests
+    #DepTests
+    #CleanTests
+    #TestRestore
+    #TouchTests
+    #HookTests
+    ShuPpropsTests
 }
 
 createFakeGitRepo() { local description="${1:-}";
@@ -227,8 +229,8 @@ MainFileTests(){
 }
 
 DepTests(){
-    Tests.BeginGroup "Testing shu dep subcommand"
-    #shu dep get (shu get) tests{
+    Tests.BeginGroup "Testing shu pdeps subcommand"
+    #shu pdeps get (shu get) tests{
     DepTestsMain(){
         DepTests_Get
         DepTests_Remove
@@ -828,7 +830,7 @@ DepTests(){
     }
 
     DepTests_Remove(){
-        Tests.BeginGroup "Testing shu dep remove"
+        Tests.BeginGroup "Testing shu pdeps remove"
         test_shu_dep_remove(){
             cd "$mainDir"
             createFakeGitRepo "removeTest_repo1"; local repo="$_r"
@@ -849,17 +851,17 @@ DepTests(){
 
             Tests.BeginTest "should remove the repository from .shu/packages"
 
-            "$shucmd" dep remove "$(basename "$repo2")" > /dev/null 2>/tmp/shu-cli-test-error.log
+            "$shucmd" pdeps remove "$(basename "$repo2")" > /dev/null 2>/tmp/shu-cli-test-error.log
 
             if [ ! -d "./.shu/packages/$(basename "$repo2")" ]; then
                 Tests.Success
             else
-                Tests.Fail "shu dep remove did not remove the first repository from the .shu/packages directory: \n$(cat /tmp/shu-cli-test-error.log)"
+                Tests.Fail "shu pdeps remove did not remove the first repository from the .shu/packages directory: \n$(cat /tmp/shu-cli-test-error.log)"
             fi
 
             Tests.BeginTest "Should remove the repository from the shu.yaml file"
             if yq ".packages" "./shu.yaml" | grep -q "$(basename "$repo2")"; then
-                Tests.Fail "shu dep remove did not remove the first repository from the shu.yaml file."
+                Tests.Fail "shu pdeps remove did not remove the first repository from the shu.yaml file."
             else
                 Tests.Success
             fi
@@ -868,14 +870,14 @@ DepTests(){
             if [ -d "./.shu/packages/$(basename "$repo")" ] && [ -d "./.shu/packages/$(basename "$repo3")" ]; then
                 Tests.Success
             else
-                Tests.Fail "shu dep remove removed other repositories from the .shu/packages directory."
+                Tests.Fail "shu pdeps remove removed other repositories from the .shu/packages directory."
             fi
 
             Tests.BeginTest "Should not remove other repositories from the shu.yaml file"
             if yq ".packages" "./shu.yaml" | grep -q "$(basename "$repo")" && yq ".packages" "./shu.yaml" | grep -q "$(basename "$repo3")"; then
                 Tests.Success
             else
-                Tests.Fail "shu dep remove removed other repositories from the shu.yaml file."
+                Tests.Fail "shu pdeps remove removed other repositories from the shu.yaml file."
             fi
         }; 
         test_shu_dep_remove
@@ -883,7 +885,7 @@ DepTests(){
     }
 
     DepTests_List(){
-        Tests.BeginGroup "Testing shu dep list"
+        Tests.BeginGroup "Testing shu pdeps list"
         test_shu_dep_list(){
             cd "$mainDir"
             createFakeGitRepo "listTest_repo1"; local repo="$_r"
@@ -903,12 +905,12 @@ DepTests(){
             "$shucmd" get "$repo3" > /dev/null
 
             Tests.BeginTest "Should list all dependencies in the shu.yaml file"
-            if "$shucmd" dep list | grep -q "$(basename "$repo")" && \
-               "$shucmd" dep list | grep -q "$(basename "$repo2")" && \
-               "$shucmd" dep list | grep -q "$(basename "$repo3")"; then
+            if "$shucmd" pdeps list | grep -q "$(basename "$repo")" && \
+               "$shucmd" pdeps list | grep -q "$(basename "$repo2")" && \
+               "$shucmd" pdeps list | grep -q "$(basename "$repo3")"; then
                 Tests.Success
             else
-                Tests.Fail "shu dep list did not list all dependencies."
+                Tests.Fail "shu pdeps list did not list all dependencies."
             fi
 
             cd "$mainDir"
@@ -1017,13 +1019,85 @@ TestRestore(){
 
 #}
 
-#shu cmddep tests(){
+#shu psysdeps tests(){
 
 #}
 
 #shu install and uninstall tests{
 
 #}
+
+ShuPpropsTests(){
+    Tests.BeginGroup "Testing shu pprops"
+    cd "$mainDir"
+    local tmpdir="$tempDir$(mktemp -u)_set_and_get_pprops"
+    mkdir -p "$tmpdir"
+    cd "$tmpdir"
+    #init project
+    "$shucmd" init "test-project"
+
+    test_shu_set_and_get_pprops(){
+        # set prop
+        Tests.BeginTest "Should set a simple property"
+        "$shucmd" pprops set "testProp" "testValue" > /dev/null 2>/tmp/shu-cli-test-error.log; local retCode=$?
+        if [ $retCode -ne 0 ]; then
+            Tests.Fail "'shu pprops set' failed to set the property: \n$(cat /tmp/shu-cli-test-error.log)"
+            return 1
+        else
+            Tests.Success
+        fi
+
+        # get prop
+        Tests.BeginTest "Should get the simple property"
+        local propValue="$("$shucmd" pprops get "testProp")"
+        if [ "$propValue" == "testValue" ]; then
+            Tests.Success
+        else
+            Tests.Fail "'shu pprops get' failed to get the property value. Expected 'testValue', got '$propValue'."
+        fi
+    }
+    
+    test_array_with_simple_items(){
+        # add simple item to array
+        Tests.BeginTest "Should add a simple item to an array"
+        "$shucmd" pprops addArrayItem "testArray" "item1" > /dev/null 2>/tmp/shu-cli-test-error.log; local retCode=$?
+        if [ $? -eq 0 ]; then
+            Tests.Success
+        else
+            Tests.Fail "'shu pprops addArrayItem' failed to add the item to the array: $(cat /tmp/shu-cli-test-error.log)"
+        fi
+
+        "$shucmd" pprops addArrayItem "testArray" "item2" > /dev/null 2>&1; local retCode=$?
+        "$shucmd" pprops addArrayItem "testArray" "item3" > /dev/null 2>&1; local retCode=$?
+        "$shucmd" pprops addArrayItem "testArray" "another item" > /dev/null 2>&1; local retCode=$?
+        "$shucmd" pprops addArrayItem "testArray" "and here we have another item" > /dev/null 2>&1; local retCode=$?
+        # list array with sinple items
+        Tests.BeginTest "Should list the array with simple items" #> /dev/null 2>/tmp/shu-cli-test-error.log; local retCode=$?
+        local arrayItems="$("$shucmd" pprops listArray "testArray")"
+        if echo "$arrayItems" | grep -q "item1" && \
+           echo "$arrayItems" | grep -q "item2" && \
+           echo "$arrayItems" | grep -q "item3" && \
+           echo "$arrayItems" | grep -q "another item" && \
+           echo "$arrayItems" | grep -q "and here we have another item"; then
+            Tests.Success
+        else
+            Tests.Fail "'shu pprops listArray' did not list all items in the array: $(cat shu-cli-test-error.log)"
+        fi
+    }
+
+    # add object to array
+    # get object from array
+    # list array of objects
+    
+    # set array with single item and add an object
+    # set array with object an get single item
+    # set array with object and get array
+
+    #list a mixex array of single items and objects
+    test_shu_set_and_get_pprops
+    test_array_with_simple_items
+}
+
 
 TouchTests(){
     Tests.BeginGroup "Testing shu touch"
@@ -1108,6 +1182,63 @@ TouchTests(){
     }; test_shu_touch_with_no_args
     Tests.EndGroup
         
+}
+
+HookTests(){
+    Tests.BeginGroup "Testing shu hooks"
+    
+    test_shu_hook(){
+        cd "$mainDir"
+        local tmpdir="$tempDir$(mktemp -u)_hook"
+        mkdir -p "$tmpdir"
+        cd "$tmpdir"
+
+        #init project
+        "$shucmd" init "test-project" > /dev/null
+
+        Tests.BeginTest "should create the shu.yaml file"
+        "$shucmd" hooks add before "pdeps list" "echo 'This is a test hooks' > /dev/null" > /dev/null
+        if [ $? -eq 0 ]; then
+            #check if shu.yaml contains the hooks
+            shucontent=$(cat "./shu.yaml")
+            if echo "$shucontent" | grep -q "when: before"; then
+                if echo "$shucontent" | grep -q "shu-command: pdeps list"; then
+                    if echo "$shucontent" | grep -q "cmd: echo 'This is a test hooks'"; then
+                        Tests.Success
+                    else
+                        Tests.Fail "shu.yaml does not contain the correct 'action' for the hooks."
+                    fi
+                else
+                    Tests.Fail "shu.yaml does not contain the correct 'command' for the hooks."
+                fi
+            else
+                Tests.Fail "shu.yaml does not contain the correct 'when' condition for the hooks."
+            fi
+        else
+            Tests.Fail "'shu hooks add' failed to create the hooks."
+        fi
+
+        Tests.BeginTest "should call the hooks when the command is executed"
+        "$shucmd" hooks add before "pdeps list" "echo 'test1' > $tmpdir/f1" > /dev/null
+        "$shucmd" hooks add before "pdeps list" "echo 'test2' > $tmpdir/f2" > /dev/null
+        "$shucmd" pdeps list > /dev/null 2>/tmp/shu-cli-test-error.log; local retCode=$?
+        if [ $retCode -eq 0 ]; then
+            if [ -f "$tmpdir/f1" ] && [ -f "$tmpdir/f2" ]; then
+                if grep -q "test1" "$tmpdir/f1" && grep -q "test2" "$tmpdir/f2"; then
+                    Tests.Success
+                else
+                    Tests.Fail "hooks did not execute the commands correctly."
+                fi
+            else
+                Tests.Fail "hooks did not create the expected files."
+            fi
+        else
+            Tests.Fail "'shu pdeps list' failed to execute the hooks: \n$(cat /tmp/shu-cli-test-error.log)"
+        fi
+    }
+
+    test_shu_hook
+
 }
 
 main

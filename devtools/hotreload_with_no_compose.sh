@@ -17,4 +17,4 @@ $docker build -t shu-tests .
 
 #run command shhotreload.sh "/opt/src/shu-cli.test.sh" "clear" "" "/opt/shu-cli.sh"
 $docker run --rm -v.:/opt shu-tests \
-    bash -c 'cd /opt/tests; shhotreload.sh "/opt/tests/runtests.sh" "clear" "" $(find *.sh ..)'
+    bash -c 'export TERM=xterm; cd /opt/tests; shhotreload.sh "/opt/tests/runtests.sh" "clear" "" $(find *.sh ..)'

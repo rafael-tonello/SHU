@@ -5,7 +5,7 @@ FROM ubuntu:24.10
 
 # Install dependencies
 RUN apt-get update
-RUN apt-get install -y wget git
+RUN apt-get install -y wget git jq curl
 RUN wget https://go.dev/dl/go1.21.0.linux-amd64.tar.gz -O /tmp/go.tar.gz
 RUN tar -C /usr/local -xzf /tmp/go.tar.gz
 

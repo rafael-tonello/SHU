@@ -2,7 +2,7 @@
 
 #point shu urls to the local src folder
 export SHU_GIT_REPO=$(realpath "..")
-export SHU_COMMON_FOLDER_SOURCE="$SHU_GIT_REPO#src/libs/shu-common"
+export SHU_COMMON_FOLDER_SOURCE="$SHU_GIT_REPO#src/libs/common"
 
 CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
     local _length=$(tput cols 2>/dev/null || echo 80)
@@ -25,5 +25,7 @@ CreateHorizontalLine "=" true
 CreateHorizontalLine "=" true
 
 clear; 
-../src/shu-cli.sh test -r
+../src/shu-cli.sh tests
+#../src/shu-cli.sh test -r
+#../src/shu-cli.sh test ./libs/serializers/jsonserializer.test.sh
 exit $?

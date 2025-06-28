@@ -1,8 +1,8 @@
 #!/bin/bash
 thisScriptLocation="$(dirname "$(realpath "$BASH_SOURCE[0]")")"
 
-source "$thisScriptLocation/../../../src/libs/shu-common/tests.sh"
-source "$thisScriptLocation/../../../src/libs/shu-common/stream.sh"
+source "$thisScriptLocation/../../../src/libs/common/tests.sh"
+source "$thisScriptLocation/../../../src/libs/common/stream.sh"
 
 Stream.Tests.Main(){
     Tests.BeginGroup "Stream Tests"
