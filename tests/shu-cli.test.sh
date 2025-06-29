@@ -6,7 +6,7 @@
     shucmd="$thisScriptLocation/../src/shu-cli.sh"
     chmod +x "$shucmd"
 
-    source "$thisScriptLocation/../src/libs/common/tests.sh"
+    source "$thisScriptLocation/../src/shellscript-fw/common/tests.sh"
     tempDir="/tmp/shu-cli-test"
     eraseTempFolderAfterTests=true
     #tempDir="./tmp"
