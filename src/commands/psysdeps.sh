@@ -24,23 +24,25 @@ shu.psysdeps.BashCompletion(){
 shu.psysdeps.Help(){
     echo "psysdeps <subcommand>      - Informs system commands needed to project work correctly."
     echo "  subcommands:"
-    echo "    add <commandName> [options]"
+    echo "    add <commandName> [information] [options]"
     echo "                           - Add a command to the sysdepss section of shu.yaml."
     echo "      options:"
     echo "        --force, -f          - force to command to be added. It will override the existing (will update) command."
+    echo "        --check-command, -c  - changes the way that shu check for dependency. Default way if using 'command -v <commandName>'"
     echo "    remove <commandName>   - Remove a command from the sysdepss section of shu.yaml."
     echo "    list [options]         - List all commands in the sysdepss section of shu.yaml."
     echo "      options:"
-    echo "        --level, -l <level>"
-    echo "                             - specify the level of dependencies to scan. default is 0 (no limits)"
+    echo "        --level, -l <level>  - specify the level of dependencies to scan. default is 0 (no limits)"
     echo "                               examples:"
     echo "                                 |-0 - all dependencies of all packages and the current project;"
     echo "                                 |-1 - only the current project;"
     echo "                                 |-2 - current project and its dependencies;"
     echo "                                 |-3 - current project and its dependencies and their dependencies, etc;"
     echo "                                 |-N - current project and its dependencies and their dependencies and so on, up to N levels;"
-    echo "        --names, -n          - only show the names of the dependencies"
-    echo "        --subfolders, -sf    - include subfolders in the list (default: false). If false, only .shu/packages and its sub-.shu/packages will be scanned. If true, other folders besides .shu/packages will be scanned."
+    echo "        --onlynames, -on     - only show the names of the dependencies"
+    echo "    check [options]        - Check if the commands in the sysdepss section of shu.yaml are available in the system."
+    echo "      options:"
+    echo "        --level, -l <level>  - specify the level of dependencies"
 }
 
 #add a command depenency to the project.
@@ -70,29 +72,11 @@ shu.psysdeps.Add(){
 
     local command="$1";
     local information="$2"
-    if [[ "$command" =~ ^([^:=]+)[:=](.*)$ ]]; then
-        command="${BASH_REMATCH[1]}"
-        information="${BASH_REMATCH[2]}"
-        shift 1
-    else
-        #if no information is provided, use the command name as information
-        if [ "$#" -eq 0 ]; then
-            _error="No information provided for command '$command'. Please provide information for the command."
-            return 1
-        fi
-        shift 2
-    fi
-
-    local forceUpdate=false
-    if [[ "$@" == *"--force"* || "$@" == *"-f"* ]]; then
-        forceUpdate=true
-    fi
-
-    if [[ "$command$information" == *"--force"* || "$command$information" == *"-f"* ]]; then
-        return 0
-    fi
-
-    shu._sysdepsadd "$command" "$information" $forceUpdate
+    shu.getValueFromArgs_manyNames "--check-command -c" "command -v $command" "$@"; local _checkCommand="$_r"
+    shu.getValueFromArgs_manyNames "--force -f" false "$@"; local forceUpdate="$_r"
+    
+    
+    shu._sysdepsadd "$command" "$information" "$_checkCommand" $forceUpdate
     if [ "$_error" != "" ]; then
         _error="Error adding command '$command': $_error"
         return 1
@@ -117,60 +101,22 @@ shu.psysdeps.Add(){
 }
 
 
-
-#List necessary commands for the project. List sysdepss from current project and from its dependencies, and dependencies of dependencies, etc.
-#Ipmortant, should scan all from dependencies (or use --level, -l to specify the level of dependencies to scan)#
-#sysdepslist [options]
-#Options:
-#   --level, -l <level>  : specify the level of dependencies to scan (default: 0):
-#                           0 - all dependencies of all packages and the current project,
-#                           1 - only the current project, 
-#                           2 - current project and its dependencies, 
-#                           3 - current project and its dependencies and their dependencies, etc.
-#                           N - current project and its dependencies and their dependencies and so on, up to N levels.
-#   --names, -n          : only show the names of the dependencies
-#   --subfolders, -sf    : include subfolders in the list (default: false). If false, only .shu/packages and its sub-.shu/packages will be scanned
-shu.psysdeps.List(){
-    shu.getArgByName "--level -l" "1" "$@"; local level="$_r"
-    shu.getArgByName "--onlynames -on" false "$@"; local onlyNames="$_r"  
-    shu.getArgByName "--subfolders -sf" false "$@"; local subFolders="$_r"
-    _error=""
-
-    shu._listCurrFolderssysdepss "$level" 1; local result=("${_r[@]}")
-    if [ "$_error" != "" ]; then
-        _error="Error listing sysdepss: $_error"
-        return 1
-    fi
-
-    for item in "${result[@]}"; do
-        echo "$item"
-    done
-}
-
 #Check if commands are available in the system.
 #Ipmortant, should scan all from dependencies (or use --level, -l to specify the level of dependencies to scan)
 #User sysdepslist to get litst
 shu.psysdeps.Check(){
+    shu.getValueFromArgs_manyNames "--level -l" "0" "$@"; local level="$_r"
+
     echo "Checking system commands dependencies for your project:"
-    shu.psysdeps.List "$@" > /dev/null; local pdeps=("${_r[@]}")
-    if [ "$_error" != "" ]; then
-        _error="Error listing sysdepss: $_error"
-        return 1
-    fi
-    
-    if [ "${#pdeps[@]}" -eq 0 ]; then
-        echo "No system commands dependencies found."
-        return 0
-    fi
 
+    checkFoundDeps=0
     local missing=()
-    for dep in "${pdeps[@]}"; do
-        local cmdName=$(echo "$dep" | cut -d ':' -f 1)
-        local description=$(echo "$dep" | cut -d ':' -f 2-)
-
+    __f(){ local cmdName="$1"; local description="2"; local cmdCheckCommand="$3"
+        checkFoundDeps=$((checkFoundDeps +1 ))
         printf "    checking $cmdName: "
-        #check if the command is available in the system
-        if command -v "$cmdName" &> /dev/null; then
+        eval "$cmdCheckCommand" &> /dev/null; local cmdCheckStatus="$?"
+        
+        if [ "$cmdCheckStatus" -eq 0 ]; then
             #green message 
             echo -e "\e[32mok\e[0m"
         else
@@ -178,7 +124,15 @@ shu.psysdeps.Check(){
             echo -e "\e[31mmissing\e[0m"
             missing+=("$dep")
         fi
-    done
+        
+    };
+    shu.psysdeps._list __f $level
+
+    if [ "$checkFoundDeps" -eq 0 ]; then
+        echo "No system commands dependencies found."
+        return 0
+    fi
+
     echo ""
     if [ "${#missing[@]}" -ne 0 ]; then
         echo "The following commands are missing:"
@@ -226,7 +180,7 @@ shu.psysdeps.Remove(){ local command="$1"; shift
 }
 
 #returns _r with 'updated' if command was updated, or empty string if command was added
-shu._sysdepsadd(){ local command="$1"; local information="$2"; local _forceUpdate="${3:-false}"
+shu._sysdepsadd(){ local command="$1"; local information="$2"; local checkCommand="$3"; local _forceUpdate="${4:-false}"
     if [ "$command" == "" ]; then
         _error="No command name provided. Please provide a command name to add to sysdepss section."
         return 1
@@ -254,7 +208,7 @@ shu._sysdepsadd(){ local command="$1"; local information="$2"; local _forceUpdat
         information="No information provided."
     fi
 
-    shu.yaml.appendObjectToArray "shu.yaml" ".sysdepss" "cmd:$command" "info:$information" > /dev/null 2>&1
+    shu.yaml.appendObjectToArray "shu.yaml" ".sysdepss" "cmd:$command" "info:$information" "check-command:$checkCommand"> /dev/null 2>&1
     if [ "$_error" != "" ] && [ "$_error" != "$ERROR_AREADY_DONE" ]; then
         _error="Error adding command '$command' to sysdepss section of shu.yaml: $_error"
         return 1
@@ -269,51 +223,73 @@ shu._sysdepsadd(){ local command="$1"; local information="$2"; local _forceUpdat
     return 0
 }
 
-#locate an argument by its name (--arg, -a)
-#names should be a space separated list of names, e.g. "--arg1 --arg2 -a3"
-#arg and value can be separated by a space, an equal sign (=) or a colon (:)
-shu.getArgByName(){ local possibleNames="$1"; local defaultValue="$2"; shift 2
-    for possibleName in $possibleNames; do
-        #check if the argument is in the arguments
-        if [[ "$@" == *"$possibleName"* ]]; then
-            #get the value of the argument
-            local argValue=$(echo "$@" | grep -oP "(?<=${possibleName}[ =:])[^ ]+")
-            if [ "$argValue" != "" ]; then
-                _r="$argValue"
-                _error=""
-                return 0
-            else
-                _r="$defaultValue"
-                _error="Argument '$possibleName' found, but no value provided."
-                return 1
+#List necessary commands for the project. List sysdepss from current project and from its dependencies, and dependencies of dependencies, etc.
+#Ipmortant, should scan all from dependencies (or use --level, -l to specify the level of dependencies to scan)#
+#sysdepslist [options]
+#Options:
+#   --level, -l <level>  : specify the level of dependencies to scan (default: 0):
+#                           0 - all dependencies of all packages and the current project,
+#                           1 - only the current project, 
+#                           2 - current project and its dependencies, 
+#                           3 - current project and its dependencies and their dependencies, etc.
+#                           N - current project and its dependencies and their dependencies and so on, up to N levels.
+#   --names, -n          : only show the names of the dependencies
+shu.psysdeps.List(){
+    shu.getValueFromArgs_manyNames "--level -l" "1" "$@"; local level="$_r"
+    shu.getValueFromArgs_manyNames "--onlynames -on" false "$@"; local onlyNames="$_r"  
+
+    local toPrint=()
+    local foundCmds=();
+
+
+    __f(){ local cmdName="$1"; local description="2"; local cmdCheckCommand="$3"
+        #check if command is already found {
+            local cmdIndex=$(printf "%s\n" "${cmdDesc[@]}" | grep -n -x -F "$cmdName" | cut -d: -f1)
+            cmdIndex=$((cmdIndex - 1)) #convert to zero-based index
+
+            if [[ "$cmdIndex" != "" && "$cmdIndex" != "-1" ]]; then
+                #if cmdName is already in foundCmds, add description to the existing command
+                if [ "$onlyNames" == "false" ]; then
+                    #add description to the existing command
+                    toPrint[$cmdIndex]="${toPrint[$cmdIndex]} + $cmdDesc (with $cmdCheckCommand)"
+                fi
+
+                continue
             fi
+        #}
+
+        foundCmds+=("$cmdName")
+
+        if [ "$onlyNames" == "false" ]; then
+            #append the command name and description to the ret array
+            toPrint+=("$cmdName: $cmdDesc (with $cmdCheckCommand)")
+        else
+            toPrint+=("$cmdName")
         fi
-    done
-    _r="$defaultValue"
-    _error="Argument '$possibleName' not found in the arguments."
-    return 1
+    
+    }; 
+    shu.psysdeps._list __f $level
 }
 
 #scroll through current folder and its subfolders (if allowNotShuSubFolders is true) and looks for shu.yaml files.
 #For each shu.yaml file, it will get the sysdepss section and return the list of commands in the sysdepss section.
-shu._listCurrFolderssysdepss(){ local maxLevel=$1; local allowNotShuSubFolders=$2; local onlyNames=${3:-false}; local currLevel=$4
-    local ret=()
-    local foundCmds=();
+shu.psysdeps._list(){ local callback="$1"; local maxLevel="$2"
+
     if [ -f './shu.yaml' ]; then
         local index=-1
         while true; do
             index=$((index + 1))
             shu.yaml.getObjectFromArray "shu.yaml" ".sysdepss" "$index";
             
-            declare -A psysdeps
-            for k in "${!_r[@]}"; do
-                psysdeps["$k"]="${_r[$k]}"
-            done
-
             if [ "$_error" == "$ERROR_INDEX_OUT_OF_BOUNDS" ]; then
                 _error=""
                 break;
             fi
+
+            declare -A psysdeps
+            for k in "${!_r[@]}"; do
+                psysdeps["$k"]="${_r[$k]}"
+            done
 
             if [ "$_error" != "" ]; then
                 _error="Error getting sysdepss from shu.yaml: $_error"
@@ -322,29 +298,10 @@ shu._listCurrFolderssysdepss(){ local maxLevel=$1; local allowNotShuSubFolders=$
 
             local cmdName=${psysdeps["cmd"]}
             local cmdDesk=${psysdeps["info"]}
+            local cmdCheckCommand=${psysdeps["check-command"]}
 
-            #find index of $cmdName in foundCmds
-            local cmdIndex=$(printf "%s\n" "${foundCmds[@]}" | grep -n -x -F "$cmdName" | cut -d: -f1)
-            cmdIndex=$((cmdIndex - 1)) #convert to zero-based index
-            if [[ "$cmdIndex" != "" && "$cmdIndex" != "-1" ]]; then
-                #if cmdName is already in foundCmds, add description to the existing command
-                if [ "$onlyNames" == "false" ]; then
-                    #add description to the existing command
-                    ret[$cmdIndex]="${ret[$cmdIndex]} + $cmdDesc"
-                fi
-
-                continue
-            fi
-
-            foundCmds+=("$cmdName")
-
-            if [ "$onlyNames" == "false" ]; then
-                #append the command name and description to the ret array
-                ret+=("$cmdName: $cmdDesc")
-            else
-                ret+=("$cmdName")
-            fi
             
+            eval "$callback \"$cmdName\" \"$cmdDesk\" \"$cmdCheckCommand\""
         done
     fi
 
@@ -354,13 +311,13 @@ shu._listCurrFolderssysdepss(){ local maxLevel=$1; local allowNotShuSubFolders=$
         #count how much .shu folders are in the path
         local shuCount=$(echo "$subFolder" | grep -o "\.shu" | wc -l)
         #if shuCount is greater or equals to maxLevel, skip this folder
-        if [ "$shuCount" -ge "$maxLevel" ]; then
+        if [ "$shuCount" -ge "$maxLevel" ] && [ "$maxLevel" -gt 0 ]; then
             continue
         fi
 
         #check if current folder is '.shu' or allowNotShuSubFolders="true"
-        if [ "$subFolder" == "./.shu" ] || [ "$allowNotShuSubFolders" == "true" ]; then
-            shu._listCurrFolderssysdepss "$maxLevel" "$allowNotShuSubFolders" "$onlyNames" $((currLevel + 1))
+        if [ "$subFolder" == "./.shu" ]; then
+            shu.psysdeps.List "$callback" "$maxLevel"
             if [ "$_error" != "" ]; then
                 _error="Error listing sysdepss in subfolder '$subFolder': $_error"
                 return 1

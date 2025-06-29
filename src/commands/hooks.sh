@@ -15,6 +15,7 @@ shu.Hooks.Main(){
     local func=$(echo "$1" | awk '{print toupper(substr($0,0,1)) substr($0,2)}')
     shift
     "shu.Hooks.$func" "$@"
+    return $?
 }
 
 shu.Hooks.BashCompletion(){
@@ -135,13 +136,16 @@ shu.Hooks.List(){ local _callback="${1:-}"; shift
             if [ $? -ne 0 ] || [ "$_error" != "" ]; then
                 if [ "$_error" != "" ]; then
                     _error="Error in callback for hooks '$index) $when \"$shucommand\" runs \"$command\"': $_error"
-                else
-                    _error="Error in callback for hooks '$index) $when \"$shucommand\" runs \"$command\"': $( cat /tmp/shu-hooks-error.log 2>/dev/null )"
+                    if [ -f "/tmp/shu-hooks-error.log" ]; then
+                        _error="$_error + $( cat /tmp/shu-hooks-error.log 2>/dev/null )"
+                    fi
+                elif [ -f "/tmp/shu-hooks-error.log" ]; then
+                    _error="Error in callback for hooks $(cat /tmp/shu-hooks-error.log 2>/dev/null)"
                 fi
+
                 rm -f /tmp/shu-hooks-error.log
                 return 1
             fi
-            rm -f /tmp/shu-hooks-error.log
         fi
     done
 
@@ -195,11 +199,11 @@ shu.Hooks.Run(){ local rwhen="$1"; shift; local rcommandToCheck="$@"
     
 
     found=false
-    shu.Hooks.List '__f(){ local _index="$1"; local _when="$2"; local _shuCommandMask="$3"; local _hookCommand="$4";
+     __f(){ local _index="$1"; local _when="$2"; local _shuCommandMask="$3"; local _hookCommand="$4";
         if [[ "$_when" == "$rwhen" ]] && [[ "$rcommandToCheck" == "$_shuCommandMask"* ]]; then
             found=true
             cd "$projectRoot"
-            export SHU_HOOK_INDEX="$_index"
+            export SHU_HO OK_INDEX="$_index"
             export SHU_HOOK_WHEN="$_when"
             export SHU_HOOK_COMMAND_TO_RUN="$_hookCommand"
             export SHU_HOOK_COMMAND_TO_CHECK="$commandToCheck"
@@ -219,7 +223,8 @@ shu.Hooks.Run(){ local rwhen="$1"; shift; local rcommandToCheck="$@"
             fi
             rm -f /tmp/shu-hooks-error.log > /dev/null 2>&1
         fi
-    }; __f'
+    };
+    shu.Hooks.List "__f"
 
     if [ "$found" = false ]; then
         _error="$ERROR_NO_HOOKS_FOUND"

@@ -62,11 +62,12 @@ shu.Main(){ local cmd="$1";
         local shuHooksFile="$shu_scriptDir/commands/hooks.sh"
         if [ -f "$shuHooksFile" ]; then
 
-            source "$shuHooksFile" "run" "before" "$cmd" "$@"; local retCode=$?
+            source "$shuHooksFile" "run" "before" "$cmd" "$@"; local retCode=$?; local err="$_error"
 
             #if file changes the current directory, and change SHU_PROJECT* variables (by calling shu.Main), restore them
             cd "$currDir"
             shu.detectEnvAndGoRoot
+            _error="$err" #detectEnvAndGoRoot clears variable _error
 
             if [[ -n "$_error" && $_error != *"$ERROR_NO_HOOKS_FOUND"* ]]; then
                 shu.printError "Shu error running hooks before command: $_error"; _error=""
@@ -117,14 +118,12 @@ shu.Main(){ local cmd="$1";
         local commandFile="$shu_scriptDir/commands/$cmd.sh"
         if [ -f "$commandFile" ]; then
             #run the command file
-            source "$commandFile" "$@" 2>/tmp/shu_error.log
+            source "$commandFile"
             retCode=$?
             if [ "$retCode" -ne 0 ] || [ "$_error" != "" ]; then
-                if  [ -f /tmp/shu_error.log ]; then
-                    _error="$_error $(cat /tmp/shu_error.log)"
-                fi
-
-                shu.printError "Shu error: Error running command '$cmd': $_error"; _error=""
+                
+                shu.printError "Shu error: Error running command '$cmd': $_error";
+                _error=""
                 rm -f /tmp/shu_error.log
                 return 1
             fi
@@ -146,10 +145,11 @@ shu.Main(){ local cmd="$1";
         #check if hooks.sh file is available 
         local shuHooksFile="$shu_scriptDir/commands/hooks.sh"
         if [ -f "$shuHooksFile" ]; then
-            source "$shuHooksFile" "run" "after" "$cmd" "$@"; local retCode=$?
+            source "$shuHooksFile" "run" "after" "$cmd" "$@"; local retCode=$?; local err="$_error"
             #if file changes the current directory, and change SHU_PROJECT* variables (by calling shu.Main), restore them
             cd "$currDir"
             shu.detectEnvAndGoRoot
+            _error="$err"  #detectEnvAndGoRoot clears variable _error
 
             if [[ -n "$_error" && $_error != *"$ERROR_NO_HOOKS_FOUND"* ]]; then
                 shu.printError "Shu error running hooks after commnad: $_error"; _error=""
@@ -157,7 +157,7 @@ shu.Main(){ local cmd="$1";
                 return $retCode
             fi
         else
-            shu.printYellow "Warning: shu hooks module is missing. File '$shu_scriptDir/commands/hooks.sh' not found. Hooks will not be executed.\n" >/dev/stderr
+            shu.printYellow "Warning: shu hooks module is missing. File '$shu_scriptDir/commands/hooks.sh' not found. Hooks will not be executed.\n" >&2
         fi
     fi
     _error=""
@@ -311,6 +311,7 @@ shu.Main(){ local cmd="$1";
         return 0
     }
 
+    #separate a key value. Try to separate key value by ':', by '=' or from "$1 $2"
     shu.separateKv(){
         #check if $1 contains '=' or ':'
         local key=$1
@@ -331,11 +332,21 @@ shu.Main(){ local cmd="$1";
 
     shu.getValueFromArgs(){ local key="$1"; shift
         #check if key is in the arguments list
+        _r=""
+        _error=""
         local index=0
         local i=0;
+        local arg=""
+        local nextArg=""
+        local totalArgs=$#
         for (( i=0; i<$#; i++ )); do
             arg="${!i}"
-            nextArg="${!((i+1))}"
+            if [ $i -lt $(( $totalArgs - 1 )) ]; then
+                local nextArgPos=$((i+1))
+
+                nextArg="${!nextArgPos}"
+            fi
+
             if [[ "$arg" == "$key"* ]]; then
                 shu.separateKv "$arg" "$nextArg"; _r="$_r_value"
                 return 0
@@ -344,6 +355,22 @@ shu.Main(){ local cmd="$1";
 
         _r=""
         _error="Key '$key' not found in the arguments list"
+        return 1
+    }
+
+    #locate an argument by its name (--arg, -a)
+    #names should be a space separated list of names, e.g. "--arg1 --arg2 -a3"
+    #arg and value can be separated by a space, an equal sign (=) or a colon (:)
+    shu.getValueFromArgs_manyNames(){ local possibleNames="$1"; local defaultValue="$2"; shift 2
+        for possibleName in $possibleNames; do
+            shu.getValueFromArgs "$possibleName" "$@"
+            if [ "$?" -eq 0 ]; then
+                _error=""
+                return 0
+            fi
+        done
+        _r="$defaultValue"
+        _error="Argument '$possibleName' not found in the arguments."
         return 1
     }
 #}

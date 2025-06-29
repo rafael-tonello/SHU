@@ -115,15 +115,19 @@ shu.pcommand.Run(){
         return 1
     fi
 
-    eval "$commandAction \"$@\"; echo $? >/tmp/shu-pcommand-run-exit-code.log" 2>/tmp/shu-pcommand-run-error.log
-    local exitCode=$(cat /tmp/shu-pcommand-run-exit-code.log)
-    _error="$(cat /tmp/shu-pcommand-run-error.log 2>/dev/null)"
-    
-    if [[ $? -ne 0 || "$_error" != "" ]]; then
+    echo "evaluating command: $commandAction \"$@\""
+    eval "$commandAction \"$@\"" 2>/tmp/shu-pcommand-run-error.log; __retCode=$?
+    local retCode=$__retCode
+    if [[ $retCode -ne 0 ]] || [[ "$_error" != "" ]]; then
         if [ ! -z "$_error" ]; then
             _error="Failed to run project command '$command': $_error"
         else
-            _error="Failed to run project command '$command': Unknown error."
+            _error="Failed to run project command '$command'"
+        fi
+
+        if [ -f "/tmp/shu-pcommand-run-error.log" ]; then
+            _error="$_error + $(cat /tmp/shu-pcommand-run-error.log)"
+            rm -f /tmp/shu-pcommand-run-error.log
         fi
 
         return 1

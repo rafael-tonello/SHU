@@ -22,16 +22,15 @@ shu.depsMain(){
 shu.pdeps.Help(){
     echo "pdeps <subcommand>         - Commands to manage dependencies of the project"
     echo "  subcommands:"
-    echo "    get \"<url[@<checkout_to>][#<path>][as <name>][pack options]>\" [options]"  
-    echo "                           - Get a package from a URL and add it to the project. If you are hooking this command (after the execution), it exports SHU_LAST_DEP_GET_FOLDER with the path to the package folder."
-    echo "      options:"
-    echo "        --not-recursive      - Do not restore dependencies of the package."
+    echo "    get \"<url[@<checkout_to>][#<path>][as <name>][pack options]>\""  
+    echo "                           - Get a package from a URL and add it to the project. If you are hooking this command (after the execution), it exports SHU_LAST_DEP_GET_FOLDER with the path to the package folder. Attention: pack options should be passed inside \"\" among the dependency url."
     echo "      @<checkout_to>         - Shu will checkout the repository to <checkout_to>."
     echo "      #<path>                - Shu will copy only the contents of the specified path (in the repository) to the package folder."
     echo "      as <name>              - Shu will name package folder to <name> instead of the repository name."
     echo "      pack options:"
     echo "        --allow-no-git         - allow a no git repository. Shu will try to find it in the filesystem or download it from the web. If a download could be done, the shu will try to extract it if has a supported extension (.zip, .tar.gz, .tar.bz2, .7z)."
     echo "        --not-recursive        - Do not restore dependencies of the package."
+    echo "        --git-recursive-clone  - Use git clone --recursive to clone the repository. If the repository is not a git repository, it will be ignored."
     echo "    restore                - Restore all dependencies from shu.yaml."
     echo "    clean                  - Remove all dependencies from shu.yaml."
     echo "  examples:"
@@ -266,6 +265,7 @@ shu.pdeps.List(){
         local packageName="$_r_packageName"
         local allowNoGit="$_r_allowNoGit"
         local notRecursive="$_r_notRecursive"
+        local _gitRecursiveClone="$_r_gitRecursiveClone"
 
         if [ "$notRecursive" == "true" ]; then
             _recursive=false
@@ -273,13 +273,13 @@ shu.pdeps.List(){
 
         #check if destination folder exists, if not, create it
         if [ "$path" != "" ]; then
-            shu.cloneAndGetSubFolder "$url" "$path" "$branch" "$destinationFolder/$packageName" "$allowNoGit"
+            shu.cloneAndGetSubFolder "$url" "$path" "$branch" "$destinationFolder/$packageName" "$allowNoGit" "$_gitRecursiveClone"
             if [ "$_error" != "" ] && ([ "$_error" != "$ERROR_AREADY_DONE" ] || [ "$ignoreAlreadyDoneError" == "false" ]); then
                 _error="Error cloning repository '$url' and get the subfolder '$path': $_error"
                 return 1
             fi
         else
-            shu.clone "$url" "$branch" "$destinationFolder/$packageName" "$allowNoGit"
+            shu.clone "$url" "$branch" "$destinationFolder/$packageName" "$allowNoGit" "$_gitRecursiveClone"
             if [ "$_error" != "" ] && ([ "$_error" != "$ERROR_AREADY_DONE" ] || [ "$ignoreAlreadyDoneError" == "false" ]); then
                 _error="Error cloning repository '$url': $_error"
                 return 1
@@ -323,7 +323,7 @@ shu.pdeps.List(){
         _r="$destinationFolder/$packageName"
     }
 
-    shu.cloneAndGetSubFolder(){ local url=$1; local path=$2; local branch=$3; local destinationPath="$4"; local _allowNoGit=${5:-false}
+    shu.cloneAndGetSubFolder(){ local url=$1; local path=$2; local branch=$3; local destinationPath="$4"; local _allowNoGit=${5:-false};  local _gitRecursiveClone=${5:-false}
         #create a temp folder
         if [ -d "$destinationPath" ]; then
             _error="$ERROR_AREADY_DONE"
@@ -359,7 +359,7 @@ shu.pdeps.List(){
         _error=""
     }
 
-    shu.clone(){ local url=$1; local branch=$2; local dest=$3; local _allowNoGit=${4:-false}
+    shu.clone(){ local url=$1; local branch=$2; local dest=$3; local _allowNoGit=${4:-false}; local _gitRecursiveClone=${5:-false}
         if [ -d "$dest" ]; then
             _error="$ERROR_AREADY_DONE"
             return 1
@@ -426,7 +426,10 @@ shu.pdeps.List(){
             fi
         fi
 
-        git clone --recursive "$url" "$dest" > /dev/null 2>/tmp/shu-clone-error.log
+        if [ "$_gitRecursiveClone" == "true" ]; then
+            git clone --recursive "$url" "$dest" > /dev/null 2>/tmp/shu-clone-error.log
+        fi
+            git clone "$url" "$dest" > /dev/null 2>/tmp/shu-clone-error.log
         if [ $? -ne 0 ]; then
             _error="error runing git clone: $(cat /tmp/shu-clone-error.log)"
             rm /tmp/shu-clone-error.log
@@ -468,6 +471,7 @@ shu.pdeps.List(){
         local forcedPackageName="";
         local _allowNoGit=false
         local _notRecursive=false
+        local _gitRecursiveClone=false
 
         #check if url contains --allow-no-git
         if [[ $url == *" --allow-no-git"* ]]; then
@@ -485,6 +489,15 @@ shu.pdeps.List(){
             url="${url//' --not-recursive'/}"
         else
             _notRecursive=false
+        fi
+
+        #check if url contains --allow-no-git
+        if [[ $url == *" --git-recursive-clone"* ]]; then
+            _gitRecursiveClone=true
+            
+            url="${url//' --git-recursive-clone'/}"
+        else
+            _gitRecursiveClone=false
         fi
 
         if [[ $url == *" as "* ]]; then
@@ -540,7 +553,7 @@ shu.pdeps.List(){
         #echo "destinationFolder: $destinationFolder"
         #echo "==============================="
 
-        _r=("$url" "$branch" "$path" "$packageName" "$destinationFolder" "$_allowNoGit" "$_notRecursive")
+        _r=("$url" "$branch" "$path" "$packageName" "$destinationFolder" "$_allowNoGit" "$_notRecursive" "$_gitRecursiveClone")
         _r_url="${_r[0]}"
         _r_branch="${_r[1]}"
         _r_path="${_r[2]}"
@@ -548,6 +561,7 @@ shu.pdeps.List(){
         _r_destinationFolder="${_r[3]}"
         _r_allowNoGit="${_r[5]}"
         _notRecursive="${_r[6]}"
+        _r_gitRecursiveClone="${_r[7]}"
     }
 
     shu.pdeps.findIndexByPartialUrl(){ local url="$1"
