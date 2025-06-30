@@ -995,36 +995,53 @@ misc.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
         fi
     }
 
+    #prints contextual erros.
+    #erros are nested by ':'
+    #print each erro in a single line
+    #use identation to show nesting
     misc.printError(){
-        local errorMessage="$1";
-        local _allLinesPrefix="${2:-""}"; 
-        local _beginLineText="${3:-"⤷"}"; 
-        local _endLineText="${4:-""}"; 
-        local _contextSeparator="${5:-":"}";
+        local error="$1"
+        local _currIdentation="$2"
+        local _currPrefix_="${3:-}"
 
-        currentPrefix="$_allLinesPrefix"
-        local ret=""
-        while [ "$errorMessage" != "" ]; do
-            #fine next $_contextSeparator
-            local errorPart=""
-            if [[ "$errorMessage" == *"$_contextSeparator"* ]]; then
-                #get the first part of the error message
-                errorPart=$(echo "$errorMessage" | cut -d"$_contextSeparator" -f1)
-                #get the rest of the error message
-                errorMessage=$(echo "$errorMessage" | cut -d"$_contextSeparator" -f2-)
-            else
-                errorPart="$errorMessage"
-                errorMessage=""
-            fi
-            if [ "$ret" != "" ]; then
-                ret+="\n"
-                ret+="$currentPrefix$_beginLineText$errorPart$_endLineText"
-            else
-                ret+="$currentPrefix$errorPart$_endLineText"
-            fi
-            currentPrefix+="  "
-        done
-        misc.printRed "$ret\n" > /dev/stderr
+        
+        local currError=""
+
+        if [[ "$error" == *": "* ]]; then
+            currError="${error%%: *}"
+            error="${error#*: }"
+        else
+            currError="$error"
+            error=""
+        fi
+        misc.printError.printSameLevelError "$currError" "$_currIdentation  " "$_currPrefix_"
+        if [[ -n "$error" ]]; then
+            #change prefix of next errors to ': '
+            shu.printError "$error" "$_currIdentation  " "⤷ "
+        fi
+    }
+
+    #same level erros are erros separated by '+' and should be printed in induaviadual lines, but with the same identation
+    misc.printError.printSameLevelError(){
+        local error="$1"
+        local currIdentation="$2"
+        local _prefix_="$3"
+
+        local currError=""
+        if [[ "$error" == *"+ "* ]]; then
+            currError="${error%%"+ "*}"
+            error="${error#*"+ "}"
+        else
+            currError="$error"
+            error=""
+        fi
+
+        #print to stderr
+        misc.printRed "$currIdentation$_prefix_$currError\n" >&2
+        if [[ -n "$error" ]]; then
+            #change prefix of next errors to '+ '
+            misc.printError.printSameLevelError "$error" "$currIdentation" "+ "
+        fi
     }
 #}
 
