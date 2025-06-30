@@ -1,10 +1,31 @@
 #!/bin/bash
-useSudo=false
+
+#checkCommand unzip
+fail=false
+printError(){
+    echo -e "\033[31mError: $1\033[0m" 1>&2
+}
+
+printWarning(){
+    echo -e "\033[33mWarning: $1\033[0m" 1>&2
+}
+if ! command -v unzip &> /dev/null; then
+    printError "unzip command not found. Please install it first."
+    fail=true
+fi
+
+if $fail; then
+    exit 1
+fi
+
+
+
 binDir="$HOME/.local/bin"
 if [ ! -d "$binDir" ]; then
     binDir="~/.local/bin"
     if  [ ! -d "$binDir" ]; then
-        useSudo=true
+        #yellow message
+        printWarning "If shu fails to install, try running this command again with 'sudo' or root permissions."
 
         binDir="/usr/local/bin"
         if [ ! -d "$binDir" ]; then
@@ -20,24 +41,42 @@ mkdir -p /tmp/shu-install
 cd /tmp/shu-install
 wget https://github.com/rafael-tonello/SHU/archive/refs/heads/main.zip 
 unzip main.zip
+if [ "$?" -ne 0 ]; then
+    printError "Failed to copy Shu CLI files. Please check permissions or try running with sudo."
+    exit 1
+fi
 cd SHU-main
 
 rm -rf ~/.local/shu
 mkdir -p ~/.local/shu
 cp -r src/* ~/.local/shu
-chown -R $(whoami):$(whoami) ~/.shu
+if [ "$?" -ne 0 ]; then
+    printError "Failed to copy Shu CLI files. Please check permissions or try running with sudo."
+    exit 1
+fi
+
+
+#chown -R $(whoami):$(whoami) ~/.shu
+#if [ "$?" -ne 0 ]; then
+#    printError "Failed to change ownership of ~/.shu directory. Please check permissions or try running with sudo."
+#    exit 1
+#fi
 
 # make the shu command executable
 chmod +x ~/.local/shu/shu-cli.sh
-#create a symlink to the shu command (shu main file is ~/.local/shu/shu.sh)
-if [ "$useSudo" = true ]; then
-    sudo rm -f $binDir/shu
-    sudo ln -sf ~/.local/shu/shu-cli.sh $binDir/shu
-else
-    rm -f $binDir/shu
-    ln -sf ~/.local/shu/shu-cli.sh $binDir/shu
+if [ "$?" -ne 0 ]; then
+
+    printError "Failed to make shu-cli.sh executable. Please check permissions or try running with sudo."
+    exit 1
 fi
 
+
+rm -f $binDir/shu
+ln -sf ~/.local/shu/shu-cli.sh $binDir/shu
+if [ "$?" -ne 0 ]; then
+    printError "Failed to create symbolic link for shu command. Please check permissions or try running with sudo."
+    exit 1
+fi
 
 # remove temporary directory
 cd ~
