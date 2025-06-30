@@ -14,6 +14,8 @@ export SHU_BINARY="$0"
     ERROR_INDEX_OUT_OF_BOUNDS="index out of bounds"
     ERROR_NO_HOOKS_FOUND="No hooks found"
     ERROR_COMMAND_REQUIRES_SHU_PROJECT="this commands only works inside a shu project"
+    ERROR_YQ_NOT_INSTALLED="yq is not installed. Please install yq (Mike Farah's, https://github.com/mikefarah/yq) to use this function (from Yq repo: wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq &&\
+    chmod +x /usr/local/bin/yq)."
 #}
 
 #shu values that can be overridden by environment variables {
@@ -744,8 +746,7 @@ shu.Main(){ local cmd="$1";
 
         #check if yq is installed
         if ! command -v yq &> /dev/null; then
-            _error="yq is not installed. Please install yq (Mike Farah's) to use this function."
-
+            _error="$ERROR_YQ_NOT_INSTALLED"
             return 1
         fi
 
@@ -766,7 +767,7 @@ shu.Main(){ local cmd="$1";
         local pkey="$2"
 
         if ! command -v yq &> /dev/null; then
-            _error="yq is not installed. Please install yq (Mike Farah's version in Go)."
+            _error=""
             return 1
         fi
 
@@ -960,7 +961,7 @@ shu.Main(){ local cmd="$1";
         fi
 
         if ! command -v yq &> /dev/null; then
-            _error="yq is not installed. Please install yq (Mike Farah's version in Go)."
+            _error="$ERROR_YQ_NOT_INSTALLED"
             return 1
         fi
 
@@ -992,7 +993,7 @@ shu.Main(){ local cmd="$1";
         fi
 
         if ! command -v yq &> /dev/null; then
-            _error="yq is not installed. Please install yq (Mike Farah's version in Go)."
+            _error="$ERROR_YQ_NOT_INSTALLED"
             return 1
         fi
 
@@ -1026,7 +1027,7 @@ shu.Main(){ local cmd="$1";
         shift 2
 
         if ! command -v yq &> /dev/null; then
-            _error="yq is not installed. Please install yq (Mike Farah's version in Go)."
+            _error="$ERROR_YQ_NOT_INSTALLED"
             return 1
         fi
 
@@ -1067,7 +1068,7 @@ shu.Main(){ local cmd="$1";
     #returns _r with a associative array of pkeys and values
     shu.yaml.getObjectFromArray(){ local file="$1"; local pkey="$2"; local index="$3"
         if ! command -v yq &> /dev/null; then
-            _error="yq is not installed. Please install yq (Mike Farah's version in Go)."
+            _error="$ERROR_YQ_NOT_INSTALLED"
             return 1
         fi
 
