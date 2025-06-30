@@ -44,7 +44,7 @@ SHU_MISC_LOADED=true
 
         if [ "$_error" != "" ]; then
             _error="Could not find .shu folder: $_error"
-            misc.printError "$_error"
+            misc.PrintError "$_error"
             return 1
         fi
 
@@ -96,7 +96,7 @@ SHU_MISC_LOADED=true
                 misc.findFiles "$shuProjectFolder/.shu/packages/$arg" true false
                 if [ "$_error" != "" ]; then
                     _error="Could not find package '$arg': $_error"
-                    misc.printError "$_error"
+                    misc.PrintError "$_error"
                     return 1
                 fi
 
@@ -109,7 +109,7 @@ SHU_MISC_LOADED=true
                 misc.findFiles "$shuProjectFolder/.shu/packages/$arg" true true
                 if [ "$_error" != "" ]; then
                     _error="Could not find package '$arg': $_error"
-                    misc.printError "$_error"
+                    misc.PrintError "$_error"
                     return 1
                 fi
 
@@ -123,7 +123,7 @@ SHU_MISC_LOADED=true
                 misc.findFiles "$shuProjectFolder/.shu/packages/$arg" false false
                 if [ "$_error" != "" ]; then
                     _error="Could not find package '$arg': $_error"
-                    misc.printError "$_error"
+                    misc.PrintError "$_error"
                     return 1
                 fi
 
@@ -150,7 +150,7 @@ SHU_MISC_LOADED=true
                 #     misc.import.tryFindInSubPackages "$filePath"; local retCode=$?; filePath="$_r"
                 #     if [ "$retCode" -ne 0 ]; then
                 #         _error="Could not find file '$filePath' in subpackages: $_error"
-                #         misc.printError "$_error"
+                #         misc.PrintError "$_error"
                 #         return 1
                 #     fi
 
@@ -166,7 +166,7 @@ SHU_MISC_LOADED=true
                     _error="file $filePath was not found"
                 fi
 
-                misc.printError "$_error"
+                misc.PrintError "$_error"
                 return 1
             fi
         done
@@ -946,49 +946,49 @@ misc.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
 }
 
 #printing messages and errors {
-    misc.printGreen(){ local message="$1"; local keepOpened="${2:-}"
+    misc.PrintGreen(){ local message="$1"; local keepOpened="${2:-}"
         printf "\033[0;32m$message"
         if [ "$keepOpened" != "true" ]; then
             printf "\033[0m"
         fi
     }
 
-    misc.printRed(){ local message="$1"; local keepOpened="${2:-}"
+    misc.PrintRed(){ local message="$1"; local keepOpened="${2:-}"
         printf "\033[0;31m$message"
         if [ "$keepOpened" != "true" ]; then
             printf "\033[0m"
         fi
     }
 
-    misc.printYellow(){ local message="$1"; local keepOpened="${2:-}"
+    misc.PrintYellow(){ local message="$1"; local keepOpened="${2:-}"
         printf "\033[0;33m$message"
         if [ "$keepOpened" != "true" ]; then
             printf "\033[0m"
         fi
     }
 
-    misc.printBlue(){ local message="$1"; local keepOpened="${2:-}"
+    misc.PrintBlue(){ local message="$1"; local keepOpened="${2:-}"
         printf "\033[0;34m$message"
         if [ "$keepOpened" != "true" ]; then
             printf "\033[0m"
         fi
     }
 
-    misc.printCyan(){ local message="$1"; local keepOpened="${2:-}"
+    misc.PrintCyan(){ local message="$1"; local keepOpened="${2:-}"
         printf "\033[0;36m$message"
         if [ "$keepOpened" != "true" ]; then
             printf "\033[0m"
         fi
     }
 
-    misc.printMagenta(){ local message="$1"; local keepOpened="${2:-}"
+    misc.PrintMagenta(){ local message="$1"; local keepOpened="${2:-}"
         printf "\033[0;35m$message"
         if [ "$keepOpened" != "true" ]; then
             printf "\033[0m"
         fi
     }
 
-    misc.printGray(){ local message="$1"; local keepOpened="${2:-}"
+    misc.PrintGray(){ local message="$1"; local keepOpened="${2:-}"
         printf "\033[0;90m$message"
         if [ "$keepOpened" != "true" ]; then
             printf "\033[0m"
@@ -999,7 +999,7 @@ misc.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
     #erros are nested by ':'
     #print each erro in a single line
     #use identation to show nesting
-    misc.printError(){
+    misc.PrintError(){
         local error="$1"
         local _currIdentation="$2"
         local _currPrefix_="${3:-}"
@@ -1014,7 +1014,7 @@ misc.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
             currError="$error"
             error=""
         fi
-        misc.printError.printSameLevelError "$currError" "$_currIdentation  " "$_currPrefix_"
+        misc.PrintError.printSameLevelError "$currError" "$_currIdentation  " "$_currPrefix_"
         if [[ -n "$error" ]]; then
             #change prefix of next errors to ': '
             shu.printError "$error" "$_currIdentation  " "⤷ "
@@ -1022,7 +1022,7 @@ misc.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
     }
 
     #same level erros are erros separated by '+' and should be printed in induaviadual lines, but with the same identation
-    misc.printError.printSameLevelError(){
+    misc.PrintError.printSameLevelError(){
         local error="$1"
         local currIdentation="$2"
         local _prefix_="$3"
@@ -1037,10 +1037,10 @@ misc.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
         fi
 
         #print to stderr
-        misc.printRed "$currIdentation$_prefix_$currError\n" >&2
+        misc.PrintRed "$currIdentation$_prefix_$currError\n" >&2
         if [[ -n "$error" ]]; then
             #change prefix of next errors to '+ '
-            misc.printError.printSameLevelError "$error" "$currIdentation" "+ "
+            misc.PrintError.printSameLevelError "$error" "$currIdentation" "+ "
         fi
     }
 #}
