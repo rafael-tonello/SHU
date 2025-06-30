@@ -208,20 +208,39 @@ shu.Hooks.Run(){ local rwhen="$1"; shift; local rcommandToCheck="$@"
             export SHU_HOOK_COMMAND_TO_RUN="$_hookCommand"
             export SHU_HOOK_COMMAND_TO_CHECK="$commandToCheck"
             export SHU_HOOK_RECEIVED_COMMAND="$commandToCheck"
-            eval "$_hookCommand" 2>/tmp/shu-hooks-error.log
-            if [ $? -ne 0 ] || [ "$_error" != "" ]; then
+
+            #TODO: somethimes, a hook command comes with ' '. Find what is the problem and removes the if bellow
+            if [[ "$_hookCommand" == "" || "$_hookCommand" == " " ]]; then
+                return 0
+            fi
+
+            eval "$_hookCommand 2>/tmp/shu-hooks-error.log"; __retCode=$?
+
+            local tmpErr=""
+            if [ -f /tmp/shu-hooks-error.log ]; then
+                while read -r line; do
+                    if [ "$tmpErr" != "" ]; then
+                        tmpErr+=" + "
+                    fi
+                    tmpErr+="$line"
+                done < /tmp/shu-hooks-error.log
+                rm -f /tmp/shu-hooks-error.log > /dev/null 2>&1
+
+                if [ "$_error" != "" ]; then
+                    _error="$_error + $tmpErr"
+                else
+                    _error="$tmpErr"
+                fi
+            fi
+
+            if [ $__retCode -ne 0 ] || [ "$_error" != "" ]; then
                 if [ "$_error" != "" ]; then
                     _error="Error in callback for hooks: $_error"
-                    if [ -f /tmp/shu-hooks-error.log ]; then
-                        _error+=" + $(cat /tmp/shu-hooks-error.log)"
-                    fi
                 else
-                    _error="Error in callback for hooks: $(cat /tmp/shu-hooks-error.log 2>/dev/null)"
+                    _error="Error in callback for hooks: Unknown error"
                 fi
-                rm -f /tmp/shu-hooks-error.log > /dev/null 2>&1
                 return 1
             fi
-            rm -f /tmp/shu-hooks-error.log > /dev/null 2>&1
         fi
     };
     shu.Hooks.List "__f"
