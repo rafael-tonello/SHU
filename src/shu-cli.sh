@@ -767,7 +767,7 @@ shu.Main(){ local cmd="$1";
         local pkey="$2"
 
         if ! command -v yq &> /dev/null; then
-            _error=""
+            _error="$ERROR_YQ_NOT_INSTALLED"
             return 1
         fi
 
