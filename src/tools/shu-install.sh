@@ -38,8 +38,9 @@ fi
 #create temporary directory
 rm -rf /tmp/shu-install
 mkdir -p /tmp/shu-install
-cd /tmp/shu-install
-wget https://github.com/rafael-tonello/SHU/archive/refs/heads/main.zip 
+cd /tmp/shu-installcurl 
+#wget https://github.com/rafael-tonello/SHU/archive/refs/heads/main.zip 
+curl -sSL https://github.com/rafael-tonello/SHU/archive/refs/heads/main.zip -o main.zip
 unzip main.zip
 if [ "$?" -ne 0 ]; then
     printError "Failed to copy Shu CLI files. Please check permissions or try running with sudo."
