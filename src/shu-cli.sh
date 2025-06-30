@@ -14,7 +14,7 @@ export SHU_BINARY="$0"
     ERROR_INDEX_OUT_OF_BOUNDS="index out of bounds"
     ERROR_NO_HOOKS_FOUND="No hooks found"
     ERROR_COMMAND_REQUIRES_SHU_PROJECT="this commands only works inside a shu project"
-    ERROR_YQ_NOT_INSTALLED="yq is not installed. Please install yq (Mike Farah's, https://github.com/mikefarah/yq) to use this function (from Yq repo: wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq &&\
+    ERROR_YQ_NOT_INSTALLED="yq is not installed. Please install yq (Mike Farah's, https://github.com/mikefarah/yq) to use this function (from Yq repo:wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq &&\
     chmod +x /usr/local/bin/yq)."
 #}
 
