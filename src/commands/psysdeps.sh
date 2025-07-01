@@ -111,7 +111,7 @@ shu.psysdeps.Check(){
 
     checkFoundDeps=0
     local missing=()
-    __f(){ local cmdName="$1"; local description="2"; local cmdCheckCommand="$3"
+    __f(){ local cmdName="$1"; local description="$2"; local cmdCheckCommand="$3"
         checkFoundDeps=$((checkFoundDeps +1 ))
         printf "    checking $cmdName: "
         eval "$cmdCheckCommand" &> /dev/null; local cmdCheckStatus="$?"
@@ -122,7 +122,7 @@ shu.psysdeps.Check(){
         else
             #red message
             echo -e "\e[31mmissing\e[0m"
-            missing+=("$cmdName (runs '$cmdCheckCommand'): $description")
+            missing+=("$cmdName: $description")
         fi
         
     };
