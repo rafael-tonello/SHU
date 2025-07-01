@@ -25,7 +25,7 @@ shu.pprops.Main(){
 }
 
 shu.pprops.Help(){
-    echo "pprops <subcommand>      - Manage project properties. Properties are key-value pairs stored in the 'shu.yaml' file of the project, and allow you to store data and states for your project automation or whatever you want :D . They can be used to store configuration values, settings, or any other data related to the project. You can use object notation in 'keys', so you can store structured data."
+    echo "pprops <subcommand>      - Manage project properties, data and key-value infomation. These properties are key-value pairs stored in the 'shu.yaml' file of the project, and allow you to store data and states for your project automation or whatever you want :D . They can be used to store configuration values, settings, or any other data related to the project. You can use object notation in 'keys', so you can store structured data."
     echo "  subcommands:"
     echo "    set <key> <value>     - Set a property with the specified key and value. You can set multiple properties at once by providing multiple key-value pairs."
     echo "    get <key>             - Get the value of a property by its key."
@@ -68,7 +68,7 @@ shu.pprops.Set(){
         return 1
     fi
     
-    shu.yaml.set "shu.yaml" ".properties.$key" "$value"
+    shu.yaml.set "shu.yaml" ".project-data.$key" "$value"
     
     if [ $? -ne 0 ]; then
         _error="Failed to set property '$key'."
@@ -95,7 +95,7 @@ shu.pprops.Get(){
     fi
     shift;
 
-    shu.yaml.get "shu.yaml" ".properties.$pkey"
+    shu.yaml.get "shu.yaml" ".project-data.$pkey"
     if [ $? -ne 0 ]; then
         _error="Failed to get property '$pkey': $_error."
         return 1
@@ -109,9 +109,9 @@ shu.pprops.Get(){
     return 0
 }
 
-#list all properties of the project. if _callback ($1) is provided, it is called for each property, else the properties are printed.
+#list all properties of the project. if _callback ($1) is provided, it is called for each property, else the project-data are printed.
 shu.pprops.List(){ local _callback="${1:-}"; shift
-    shu.yaml.listProperties "shu.yaml" ".properties"; local retCode=$?; local props=("${_r[@]}")
+    shu.yaml.listProperties "shu.yaml" ".project-data"; local retCode=$?; local props=("${_r[@]}")
     if [ $retCode -ne 0 ]; then
         _error="Failed to list properties."
         return 1
@@ -158,7 +158,7 @@ shu.pprops.Remove(){ local key="$1"; shift;
         return 1
     fi
 
-    shu.yaml.remove "shu.yaml" ".properties.$key"
+    shu.yaml.remove "shu.yaml" ".project-data.$key"
     
     if [ $? -ne 0 ]; then
         _error="Failed to remove property '$key'."
@@ -175,7 +175,7 @@ shu.pprops.Remove(){ local key="$1"; shift;
 
 #add an array property
 shu.pprops.Addarrayitem(){ local arrayKey="$1"; local value="$2"; shift 2
-    shu.yaml.addArrayElement "shu.yaml" ".properties.$arrayKey" "$value"
+    shu.yaml.addArrayElement "shu.yaml" ".project-data.$arrayKey" "$value"
     
     if [ $? -ne 0 ]; then
         _error="Failed to set property '$key'."
@@ -201,7 +201,7 @@ shu.pprops.Listarrayitems(){ local arrayKey="$1"; local _callback="${2:-}"
     local index=0;
     local errors=""
     while true; do
-        shu.yaml.getArrayElement "shu.yaml" ".properties.$arrayKey" "$index"
+        shu.yaml.getArrayElement "shu.yaml" ".project-data.$arrayKey" "$index"
         if [ $? -ne 0 ]; then
             if [ "$_error" == "$ERROR_INDEX_OUT_OF_BOUNDS" ]; then
                 _error=""
@@ -247,7 +247,7 @@ shu.pprops.Removearrayitem(){
         return 1
     fi
     
-    shu.yaml.removeArrayElement "shu.yaml" ".properties.$arrayKey" "$index"
+    shu.yaml.removeArrayElement "shu.yaml" ".project-data.$arrayKey" "$index"
     if [ $? -ne 0 ]; then
         _error="Failed to remove item from array '$arrayKey' at index $index."
         return 1
@@ -298,7 +298,7 @@ shu.pprops.Addarrayobject(){
         return 1
     fi
 
-    shu.yaml.addObjectToArray "shu.yaml" ".properties.$arrayKey" "${shuYamlKeValueArgs[@]}"
+    shu.yaml.addObjectToArray "shu.yaml" ".project-data.$arrayKey" "${shuYamlKeValueArgs[@]}"
 }
 
 
@@ -313,7 +313,7 @@ shu.pprops.getobjectfromarray(){ local arrayKey="$1"; local index="$2"; shift 2;
         return 1
     fi
 
-    shu.yaml.getObjectFromArray "shu.yaml" ".properties.$arrayKey" "$index"
+    shu.yaml.getObjectFromArray "shu.yaml" ".project-data.$arrayKey" "$index"
     if [ $? -ne 0 ]; then
         _error="Failed to get object from array '$arrayKey' at index $index."
         return 1
