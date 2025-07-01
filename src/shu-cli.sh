@@ -262,9 +262,9 @@ shu.Main(){ local cmd="$1";
         local _prefix_="$3"
 
         local currError=""
-        if [[ "$error" == *"+ "* ]]; then
-            currError="${error%%"+ "*}"
-            error="${error#*"+ "}"
+        if [[ "$error" == *" + "* ]]; then
+            currError="${error%%" + "*}"
+            error="${error#*" + "}"
         else
             currError="$error"
             error=""
@@ -579,7 +579,14 @@ shu.Main(){ local cmd="$1";
         fi
 
         identPos=$((identPos + 2))
-        local terminalWidth=$(tput cols)
+        if command -v tput &> /dev/null; then
+            #use tput to get the terminal width
+            local terminalWidth=$(tput cols)
+        else
+            #if tput is not available, use a default value
+            local terminalWidth=100
+        fi
+        
         if [ "$terminalWidth" == "" ] || [ "$terminalWidth" -le 0 ]; then
             terminalWidth=100
         fi
