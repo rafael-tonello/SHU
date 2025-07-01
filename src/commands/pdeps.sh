@@ -66,9 +66,9 @@ shu.pdeps.Get(){
     shu.initFolder
 
     #try to identify if user is providing 'url as package' separated..
-    if [ "$1" == "as" ]; then
-        url="$url $1 $2"; shift 2
-    fi
+    #if [ "$1" == "as" ]; then
+    #    url="$url $1 $2"; shift 2
+    #fi
 
     local originalUrl=$url
     
@@ -186,6 +186,7 @@ shu.pdeps.Restore(){
 
     restoreErrors=""
     for dep in "${packages[@]}"; do
+        echo "Restoring dependency '$dep' from shu.yaml..."
         shu.restoreDep "$dep" "" true
         if [ "$_error" != "" ] && [ "$_error" != "$ERROR_AREADY_DONE" ]; then
             if [ -n "$restoreErrors" ]; then
@@ -194,6 +195,14 @@ shu.pdeps.Restore(){
             restoreErrors="Error restoring dependency '$dep': $_error"
         fi
     done
+    
+    if [ -n "$restoreErrors" -ne 0 ]; then
+        _error="Error restoring dependencies. Some dependencies may not be restored: $restoreErrors"
+        return 1
+    else 
+        _error=""
+        echo "All dependencies restored"
+    fi
 
     #check if --no-check-sysdepss or -ncc is not present in the arguments
     if [[ ! " $@ " =~ " --no-check-sysdepss " ]] && [[ ! " $@ " =~ " -ncc " ]]; then
@@ -201,14 +210,6 @@ shu.pdeps.Restore(){
         if [ "$_error" != "" ]; then
             printf "\033[0;33mWarning: The dependency '$originalUrl' requires some commands that are not found in the system. Please install them to use the dependency properly.\n Run 'shu psysdeps check' to see the list of missing commands.\033[0m\n"
         fi
-    fi
-    
-    if [ -n "$restoreErrors" -ne 0 ]; then
-        _error="Error restoring dependencies from shu.yaml. Some dependencies may not be restored: $restoreErrors"
-        return 1
-    else 
-        _error=""
-        echo "All dependencies restored from shu.yaml"
     fi
     
     return 0

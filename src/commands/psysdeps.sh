@@ -107,7 +107,7 @@ shu.psysdeps.Add(){
 shu.psysdeps.Check(){
     shu.getValueFromArgs_manyNames "--level -l" "0" "$@"; local level="$_r"
 
-    echo "Checking system commands dependencies for your project:"
+    echo "Checking system dependencies for your project:"
 
     checkFoundDeps=0
     local missing=()
@@ -122,7 +122,7 @@ shu.psysdeps.Check(){
         else
             #red message
             echo -e "\e[31mmissing\e[0m"
-            missing+=("$dep")
+            missing+=("$cmdName (runs '$cmdCheckCommand'): $description")
         fi
         
     };
@@ -338,8 +338,6 @@ shu.psysdeps._list(){ local callback="$1"; local maxLevel="$2"
     done
 
     _error=""
-    _r=("${ret[@]}")
-    _r_foundCmds=("${foundCmds[@]}")
     return 0
 }
 
