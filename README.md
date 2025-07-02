@@ -40,6 +40,59 @@ shu install [package]: Install a package system-wide.
 How it Works
 Shu uses a simple YAML file called shu.yaml to manage your project's dependencies and scripts. When you run a command, Shu reads the shu.yaml file and performs the necessary actions.
 
+
+## Some commands calls vs what its does
+'shu init' in a no shu folder:
+    * Creates a shu project (create a shu.yaml file)
+    * add the dependency shellscript-fw/common using 'shu get' command
+
+
+'shu init' in an existing shu folder: 
+    * redirects to 'shu restore' command, that will:
+        * restore all packages dependencies of project
+        * redirects to 'shu psysdeps check' command, that will:
+            * check all system commands dependencies registered in the shu.yaml file
+            * check all system dependencies registered in the shu.yaml file
+
+'shu get' (with no args):
+    * redirects to 'shu restore' command, that will:
+        * restore all packages dependencies of project
+        * redirects to 'shu psysdeps check' command, that will:
+            * check all system commands dependencies registered in the shu.yaml file
+            * check all system dependencies registered in the shu.yaml file
+
+'shu restore': 
+    * restore all packages dependencies of project
+    * redirects to 'shu psysdeps check' command, that will:
+        * check all system commands dependencies registered in the shu.yaml file
+        * check all system dependencies registered in the shu.yaml file
+
+'shu get' with 'git repo':
+    * download the repository to ./.shu/packages/<repo>
+    * register the 'git repo' as a dependency in the shu.yaml file
+
+'shu get' with 'git repo#path/to/folder'
+    * clone the repository
+    * copy folder 'path/to/folder' to ./.shu/packages/<repo>
+    * register the 'git repo#path/to/folder' as a dependency in the shu
+
+'shu get' with 'git repo#path/to/folder as alias':
+    * clone the repository
+    * copy folder 'path/to/folder' to ./.shu/packages/<alias>
+    * register the 'git repo#path/to/folder as alias' as a dependency in the shu.yaml file
+
+
+
+
+will read the shu.yaml file and run 'shu get' for each dependency in the 'pdeps' section. After, will redirects to 'shu psysdeps check', that will check of commands and other system dependencies.
+
+'shu psysdeps check': will check if the system has the required commands and dependencies for the project. It will print a list of missing commands and dependencies. 
+
+
+
+
+
+
 # Examples
 Before diving int the details, let's look at some examples of how to use aaa.
 
