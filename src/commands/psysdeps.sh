@@ -107,13 +107,13 @@ shu.psysdeps.Add(){
 shu.psysdeps.Check(){
     shu.getValueFromArgs_manyNames "--level -l" "0" "$@"; local level="$_r"
 
-    echo "Checking system dependencies for your project:"
+    shu.printGreen "Checking system dependencies for your project:\n"
 
     checkFoundDeps=0
     local missing=()
     __f(){ local cmdName="$1"; local description="$2"; local cmdCheckCommand="$3"
         checkFoundDeps=$((checkFoundDeps +1 ))
-        printf "    checking $cmdName: "
+        printf "  Checking $cmdName: "
         eval "$cmdCheckCommand" &> /dev/null; local cmdCheckStatus="$?"
         
         if [ "$cmdCheckStatus" -eq 0 ]; then
@@ -143,6 +143,7 @@ shu.psysdeps.Check(){
     else
         echo "All commands are available."
     fi
+        echo ""
 }
 
 #remove a command dependency from the project.

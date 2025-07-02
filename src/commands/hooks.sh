@@ -201,6 +201,12 @@ shu.Hooks.Run(){ local rwhen="$1"; shift; local rcommandToCheck="$@"
     found=false
      __f(){ local _index="$1"; local _when="$2"; local _shuCommandMask="$3"; local _hookCommand="$4";
         if [[ "$_when" == "$rwhen" ]] && [[ "$rcommandToCheck" == "$_shuCommandMask"* ]]; then
+            local shortenedHookCommandString="${_hookCommand:0:100}"
+            if [[ "${#_hookCommand}" -gt 100 ]]; then
+                shortenedHookCommandString+="..."
+            fi
+            echo "Running hook $_index: $_when $_shuCommandMask -> $shortenedHookCommandString"
+
             found=true
             cd "$projectRoot"
             export SHU_HO OK_INDEX="$_index"

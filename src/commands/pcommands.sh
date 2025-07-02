@@ -115,7 +115,6 @@ shu.pcommand.Run(){
         return 1
     fi
 
-    echo "evaluating command: $commandAction \"$@\""
     eval "$commandAction \"$@\"" 2>/tmp/shu-pcommand-run-error.log; __retCode=$?
     local retCode=$__retCode
     if [[ $retCode -ne 0 ]] || [[ "$_error" != "" ]]; then

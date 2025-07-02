@@ -184,9 +184,11 @@ shu.pdeps.Restore(){
         return 1
     fi
 
+    shu.printGreen "Restoring dependencies for project '$SHU_PROJECT_NAME':\n"
+
     restoreErrors=""
     for dep in "${packages[@]}"; do
-        echo "Restoring dependency '$dep' from shu.yaml..."
+        echo "  Restoring dependency '$dep' from shu.yaml..."
         shu.restoreDep "$dep" "" true
         if [ "$_error" != "" ] && [ "$_error" != "$ERROR_AREADY_DONE" ]; then
             if [ -n "$restoreErrors" ]; then
