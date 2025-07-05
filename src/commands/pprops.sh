@@ -29,7 +29,8 @@ shu.pprops.Help(){
     echo "  subcommands:"
     echo "    set <key> <value>     - Set a property with the specified key and value. You can set multiple properties at once by providing multiple key-value pairs."
     echo "    get <key>             - Get the value of a property by its key."
-    echo "    list                  - List all properties of the project."
+    echo "    list [callback]       - List all properties of the project."
+    echo "      callback:             - If provided, the callback will be called for each property with the key and value as arguments. If not provided, the properties will be printed to the console."
     echo "    remove <key>          - Remove a property by its key."
     echo "    addarrayitem <arrayKey> <value> - Add an item to an array property."
     echo "    listarrayitems <arrayKey>"
@@ -60,7 +61,6 @@ shu.pprops.Set(){
         fi
     fi
     shift $toShift
-    echo 2
 
 
     if [ -z "$value" ]; then
@@ -121,32 +121,19 @@ shu.pprops.List(){ local _callback="${1:-}"; shift
         echo "No properties found."
     fi
 
-    local errors=""
-    if [ -n "$_callback" ]; then
-        local retCode=0
-        for prop in "${props[@]}"; do
-            _error=""
-            $_callback "$prop"
-            if [ "$_error" != "" ]; then
-                if [ -z "$errors" ]; then
-                    errors="$_error"
-                else
-                    errors+="+ $_error"
-                fi
-            fi
-        done
-        
-        if [ ! -z "$errors" ]; then
-            _error="Error(s) occurred while listing properties: $errors"
-            return 1
-        fi
-        return 0
-    fi
-
     for prop in "${props[@]}"; do
         local key="${prop%%:*}"
         shu.pprops.Get "$key" --no-print; local value="$_r"
-        echo "$key: $value"
+
+        if [ -n "$_callback" ]; then
+            eval "$_callback \"$key\" \"$value\""
+            if [ $? -ne 0 ]; then
+                _error="Error calling callback for property '$key': $_error"
+                return 1
+            fi
+        else
+            echo "$key: $value"
+        fi
     done
     return 0
 }

@@ -38,7 +38,8 @@ shu.Hooks.Help(){
     echo "                                |-4) SHU_HOOK_COMMAND_TO_CHECK: the shu command that should be evaluated."
     echo "                                |-5) SHU_HOOK_RECEIVED_COMMAND: the command that is being executed (the command that shu is running)."
 
-    echo "    list                   - List all hooks in the project."
+    echo "    list [callback]        - List all hooks in the project."
+    echo "      callback:             - If provided, the callback will be called for each hooks with the following arguments: <index> <when> <shu-command> <command>. If not provided, the hooks will be printed to the console."
     echo "    remove <index>         - Remove a hooks by its index from the list of hooks."
 }
 
@@ -205,7 +206,8 @@ shu.Hooks.Run(){ local rwhen="$1"; shift; local rcommandToCheck="$@"
             if [[ "${#_hookCommand}" -gt 100 ]]; then
                 shortenedHookCommandString+="..."
             fi
-            echo "Running hook $_index: $_when $_shuCommandMask -> $shortenedHookCommandString"
+
+            echo "$(shu.printGreen "Running hook") $_index: $_when $_shuCommandMask -> $shortenedHookCommandString"
 
             found=true
             cd "$projectRoot"
@@ -219,6 +221,7 @@ shu.Hooks.Run(){ local rwhen="$1"; shift; local rcommandToCheck="$@"
             if [[ "$_hookCommand" == "" || "$_hookCommand" == " " ]]; then
                 return 0
             fi
+
 
             eval "$_hookCommand 2>/tmp/shu-hooks-error.log"; __retCode=$?
 
@@ -257,7 +260,7 @@ shu.Hooks.Run(){ local rwhen="$1"; shift; local rcommandToCheck="$@"
     fi
 
     if [ "$_error" != "" ]; then
-        _error="Error running hooks for '$when $shuCommand': $_error"
+        _error="Error running hooks for '$rwhen $rcommandToCheck': $_error"
         return 1
     fi
 

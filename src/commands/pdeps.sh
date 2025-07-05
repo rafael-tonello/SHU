@@ -32,6 +32,8 @@ shu.pdeps.Help(){
     echo "        --not-recursive        - Do not restore dependencies of the package."
     echo "        --git-recursive-clone  - Use git clone --recursive to clone the repository. If the repository is not a git repository, it will be ignored."
     echo "    restore                - Restore all dependencies from shu.yaml."
+    echo "    list [callback]        - List all dependencies in the project. If callback is provided, it will be called with the dependency as argument."
+    echo "      callback:              - If provided, the callback will be called for each dependency with the dependency as argument. If not provided, the dependencies will be printed to the console."
     echo "    clean                  - Remove all dependencies from shu.yaml."
     echo "  examples:"
     echo "    shu pdeps get 'https://github.com/rafael-tonello/SHU.git'"
@@ -198,7 +200,7 @@ shu.pdeps.Restore(){
         fi
     done
     
-    if [ -n "$restoreErrors" -ne 0 ]; then
+    if [ "$restoreErrors" != "" ]; then
         _error="Error restoring dependencies. Some dependencies may not be restored: $restoreErrors"
         return 1
     else 
@@ -217,7 +219,7 @@ shu.pdeps.Restore(){
     return 0
 }
 
-shu.pdeps.List(){
+shu.pdeps.List(){ _callback="${1:-}"; shift
     shu.initFolder
 
     #get all dependencies from shu.yaml
@@ -233,7 +235,16 @@ shu.pdeps.List(){
     fi
 
     for dep in "${packages[@]}"; do
-        echo "$dep"
+        if [ -n "$_callback" ]; then
+            #call the callback with the dependency
+            eval "$_callback \"$dep\""
+            if [ $? -ne 0 ]; then
+                _error="Error calling callback for dependency '$dep': $_error"
+                return 1
+            fi
+        else
+            echo "$dep"
+        fi
     done
 }
 

@@ -3,7 +3,8 @@
 shu.Build(){ local _destinationName="${1:-}"
     if [ "$_destinationName" == "" ]; then
         #get project name from shu.yaml
-        _destinationName="$SHU_PROJECT_NAME"
+        _destinationName="build/$SHU_PROJECT_NAME"
+        mkdir -p "build"
     fi
 
     #add .sh to _destinationName (if not already present)
@@ -30,6 +31,8 @@ shu.Build(){ local _destinationName="${1:-}"
         --exclude="tmp" \
         --exclude="*.old" \
         --exclude="*.bak" . \
+        --exclude="build" \
+        --exclude="$_destinationName" \
     2>/tmp/shu-compression-error.log
     if [ $? -ne 0 ]; then
         _error="Error compressing current folder to tar.gz: $(cat /tmp/shu-compression-error.log)"

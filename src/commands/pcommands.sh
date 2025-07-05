@@ -26,7 +26,11 @@ shu.pcommand.Help(){
     echo "  subcommands:"
     echo "    add <name> <command> <description>"
     echo "                           - Add a new command to the project. When you run 'shu <name>', the bash command <command> will be executed. All arguments will be passed to the command. When you run 'shu --help', the <discription> will be shown as description of the command. <name>, <command> and <description> are required parameters." 
-    echo "    list                   - List all project commands."
+    echo "    list [callback | options]"
+    echo "                           - List all project commands."
+    echo "      callback <callback>    - If provided, the callback will be called with the command name, action and description as arguments instead of printing the commands to the console."
+    echo "      options:"
+    echo "        --one-line           - Use only one line to each command."
     echo "    remove <command>       - Removes the project the project command <command>."
     echo "    run  <command> [args]  - Runs the command <command> and pass [args] to it. Is the same as running 'shu <command> [args]'."
 }
@@ -62,8 +66,18 @@ shu.pcommand.Add(){
 
 #if callback is provided, it will be called with the command name, action and description as arguments.
 #If no callback is provided, the commands will be printed to the console.
-shu.pcommand.List(){ local _callback="${1:-}"
+shu.pcommand.List(){ 
     shu.yaml.listProperties "shu.yaml" ".project-commands"; local commands=("${_r[@]}")
+
+    #check if any argument is --one-line
+    local oneLine=false
+    if [[ "$@" == *"--one-line"* ]]; then
+        oneLine=true
+        #remove --one-line from the arguments
+        set -- "${@/--one-line/}"
+    fi
+
+    local _callback="${1:-}"
 
     for command in "${commands[@]}"; do
         shu.yaml.get "shu.yaml" "project-commands.$command.bash-action"; local commandAction="$_r"
@@ -73,9 +87,20 @@ shu.pcommand.List(){ local _callback="${1:-}"
         if [ ! -z "$_error" ]; then _error="Failed to get project command '$command': $_error"; return 1; fi
 
         if [ -z "$_callback" ]; then
-            echo "$command (runs '$commandAction'): $description"
+            #local shortenedCommandAction=${commandAction:0:50}
+            #if [[ ${#commandAction} -gt 50 ]]; then
+            #    shortenedCommandAction+="..."
+            #fi
+            #echo "$command (runs '$shortenedCommandAction'): $description"
+            if ! $oneLine; then
+                echo "$command:"
+                echo "  description: $description"
+                echo "  command: $commandAction"
+            else
+                #print in one line
+                echo "$command: $description. Runs '$commandAction'"
+            fi
         else
-            
             eval "$_callback \"\$command\" \"\$commandAction\" \"\$description\""
         fi
     done

@@ -30,7 +30,9 @@ shu.psysdeps.Help(){
     echo "        --force, -f          - force to command to be added. It will override the existing (will update) command."
     echo "        --check-command, -c  - changes the way that shu check for dependency. Default way if using 'command -v <commandName>'"
     echo "    remove <commandName>   - Remove a command from the sysdepss section of shu.yaml."
-    echo "    list [options]         - List all commands in the sysdepss section of shu.yaml."
+    echo "    list [callback | options]"
+    echo "                           - List all commands in the sysdepss section of shu.yaml."
+    echo "      callback:              - If provided, the callback will be called for each command with the command name, description and check command as arguments."
     echo "      options:"
     echo "        --level, -l <level>  - specify the level of dependencies to scan. default is 0 (no limits)"
     echo "                               examples:"
@@ -235,15 +237,24 @@ shu._sysdepsadd(){ local command="$1"; local information="$2"; local checkComman
 #                           3 - current project and its dependencies and their dependencies, etc.
 #                           N - current project and its dependencies and their dependencies and so on, up to N levels.
 #   --names, -n          : only show the names of the dependencies
-shu.psysdeps.List(){
+shu.psysdeps.List(){ local _callback="${1:-}"
     shu.getValueFromArgs_manyNames "--level -l" "1" "$@"; local level="$_r"
     shu.getValueFromArgs_manyNames "--onlynames -on" false "$@"; local onlyNames="$_r"  
+
+    if [[ "$_callback" == "--"* ]]; then
+        unset _callback
+    fi
 
     local toPrint=()
     local foundCmds=();
 
 
     __f(){ local cmdName="$1"; local description="2"; local cmdCheckCommand="$3"
+        if [ -n "$_callback" ]; then
+            eval "$_callback \"\$cmdName\" \"\$description\" \"\$cmdCheckCommand\""
+            return 0
+        fi
+
         #check if command is already found {
             local cmdIndex=$(printf "%s\n" "${cmdDesc[@]}" | grep -n -x -F "$cmdName" | cut -d: -f1)
             cmdIndex=$((cmdIndex - 1)) #convert to zero-based index
@@ -255,7 +266,7 @@ shu.psysdeps.List(){
                     toPrint[$cmdIndex]="${toPrint[$cmdIndex]} + $cmdDesc (with $cmdCheckCommand)"
                 fi
 
-                continue
+                return 0
             fi
         #}
 
@@ -308,6 +319,7 @@ shu.psysdeps._list(){ local callback="$1"; local maxLevel="$2"
 
     #list current folder subfolders
     local subFolders=$(find . -mindepth 1 -maxdepth 1 -type d)
+    local retFolder="$(pwd)"
     for subFolder in $subFolders; do
         #count how much .shu folders are in the path
         local shuCount=$(echo "$subFolder" | grep -o "\.shu" | wc -l)
@@ -318,12 +330,13 @@ shu.psysdeps._list(){ local callback="$1"; local maxLevel="$2"
 
         #check if current folder is '.shu' or allowNotShuSubFolders="true"
         if [ "$subFolder" == "./.shu" ]; then
-            shu.psysdeps.List "$callback" "$maxLevel"
+            cd "$subFolder"
+            shu.psysdeps._list "$callback" "$maxLevel"
+            cd "$retFolder"
             if [ "$_error" != "" ]; then
                 _error="Error listing sysdepss in subfolder '$subFolder': $_error"
                 return 1
             fi
-
             #append the result to ret
             for index in "${!_r[@]}"; do
                 local foundCmd="$_r_foundCmds[$index]"
