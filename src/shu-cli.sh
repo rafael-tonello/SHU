@@ -142,7 +142,6 @@ shu.Main(){ local cmd="$1";
 
     cd "$SHU_PROJECT_ROOT_DIR"
     if [ "$SHU_PROJECT_ROOT_DIR" != "" ]; then
-
         #check if hooks.sh file is available 
         local shuHooksFile="$shu_scriptDir/commands/hooks.sh"
         if [ -f "$shuHooksFile" ]; then
@@ -374,6 +373,75 @@ shu.Main(){ local cmd="$1";
         _error="Argument '$possibleName' not found in the arguments."
         return 1
     }
+
+    #Runs a command an intercepts its stdout and stderr, line by line, calling a callback for each one
+    #stdout is also returned via _r variable, and stderr is returned via _error variable.
+    #Note that stdout and stderr are not printed by the function. Instead, the callback is calle with each each line of stdout and stderr and uses the second argument to identify the type of output (stdout or stderr).
+    shu.RunCommandAndInterceptStdout() {
+        local command="$1"
+        local callback="$2"
+        local tempFolder="$(mktemp -d)"
+        rm -rf "$tempFolder"
+        mkdir -p "$tempFolder"
+
+
+        local fifo="$tempFolder/fifo"
+        mkfifo "$fifo"
+        (
+            set -o pipefail
+
+            eval "$command; retCode=\$?; echo \$retCode > $tempFolder/retCode" \
+                2> >(while IFS= read -r line; do echo "stderr:$line"; done) \
+                | while IFS= read -r line; do 
+                    if [[ "$line" == stderr:* ]]; then
+                        echo "$line"
+                    else
+                        echo "stdout:$line"
+                    fi
+                done
+
+            echo "end:end"
+
+        ) >> "$fifo" &
+
+        local pid=$!
+        local retCode=""
+        while IFS= read -r line; do
+            if [[ "$line" == end:* ]]; then
+                break
+            fi
+
+            local prefix="${line%%:*}"
+            local content="${line#*:}"
+
+            eval "$callback \"\$content\" \"$prefix\""
+
+            if [[ "$prefix" == "stderr" ]]; then
+                echo "$content" >> $tempFolder/stderr.log
+            else
+                echo "$content" >> $tempFolder/stdout.log
+            fi
+
+        done < "$fifo"
+
+        rm -f "$fifo"
+
+        local retCode=0        
+        if [[ -f "$tempFolder/retCode" ]]; then
+            retCode=$(cat "$tempFolder/retCode")
+            rm -f "$tempFolder/retCode"
+        fi
+        
+        if [ -f "$tempFolder/stderr.log" ]; then
+            _error=$(cat "$tempFolder/stderr.log")
+        else
+            _error=""
+        fi
+        _r=$(cat "$tempFolder/stdout.log")
+        rm -rf "$tempFolder"
+        return $retCode
+    }
+
 #}
 
 #TODO: move files 
@@ -438,15 +506,15 @@ shu.Main(){ local cmd="$1";
         #send arguments, bcause shu.Deprestore may need them
         shu.Main pdeps restore $@
 
-        echo "Use shu --help to get more information and see the available commands."
+        shu.printGreen "Use shu --help to get more information and see the available commands.\n"
 
         #do not need to check sysdepss, because shu.Deprestore already does it
     }
 
     #deletes .shu folder and restores it ('runs shu clean' and 'shu restore')
     shu.Refresh(){
-        shu.Main pdeps clean
-        shu.Main pdeps restore
+        shu.Main clean
+        shu.Main restore
     }
 
     shu.Help(){

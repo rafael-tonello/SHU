@@ -1101,3 +1101,69 @@ misc.parseOptions(){
         fi
     done
 }
+
+
+shu.RunCommandAndInterceptStdout() {
+    local command="$1"
+    local callback="$2"
+    local tempFolder="$(mktemp -d)"
+    rm -rf "$tempFolder"
+    mkdir -p "$tempFolder"
+
+
+    local fifo="$tempFolder/fifo"
+    mkfifo "$fifo"
+    (
+        set -o pipefail
+
+        eval "$command; retCode=\$?; echo \$retCode > $tempFolder/retCode" \
+            2> >(while IFS= read -r line; do echo "stderr:$line"; done) \
+            | while IFS= read -r line; do 
+                if [[ "$line" == stderr:* ]]; then
+                    echo "$line"
+                else
+                    echo "stdout:$line"
+                fi
+            done
+
+        echo "end:end"
+
+    ) >> "$fifo" &
+
+    local pid=$!
+    local retCode=""
+    while IFS= read -r line; do
+        if [[ "$line" == end:* ]]; then
+            break
+        fi
+
+        local prefix="${line%%:*}"
+        local content="${line#*:}"
+
+        eval "$callback \"\$content\" \"$prefix\""
+
+        if [[ "$prefix" == "stderr" ]]; then
+            echo "$content" >> $tempFolder/stderr.log
+        else
+            echo "$content" >> $tempFolder/stdout.log
+        fi
+
+    done < "$fifo"
+
+    rm -f "$fifo"
+
+    local retCode=0        
+    if [[ -f "$tempFolder/retCode" ]]; then
+        retCode=$(cat "$tempFolder/retCode")
+        rm -f "$tempFolder/retCode"
+    fi
+    
+    if [ -f "$tempFolder/stderr.log" ]; then
+        _error=$(cat "$tempFolder/stderr.log")
+    else
+        _error=""
+    fi
+    _r=$(cat "$tempFolder/stdout.log")
+    rm -rf "$tempFolder"
+    return $retCode
+}
