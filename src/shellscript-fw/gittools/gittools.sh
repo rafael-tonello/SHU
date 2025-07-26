@@ -32,7 +32,7 @@ GitTools.ListeNewCommits(){
 }
 
 #redirects to newTagStream.subscribe
-GitTools.ListeNewTags(){
+GitTools.ListenNewTags(){
 }
 
 GitTools.ListCommits(){ local branchOrTag="$1";
@@ -48,16 +48,16 @@ GitTools.ListTags(){
 }
 
 #create tag and send to server
-GitTools.CreateTag(){ local tagName="$1"; local commitOrBranch="$2";
-
-}
-
-#create branch and send to server
-GitTools.CreateBranch(){ local branchName="$1"; local fromBranch="$2";
-
-}
-
-#commit changes and send to server
-GitTools.Commit(){ local commitMessage="$1"; local branchOrTag="$2";
-
-}
+#GitTools.CreateTag(){ local tagName="$1"; local commitOrBranch="$2";
+#
+#}
+#
+##create branch and send to server
+#GitTools.CreateBranch(){ local branchName="$1"; local fromBranch="$2";
+#
+#}
+#
+##commit changes and send to server
+#GitTools.Commit(){ local commitMessage="$1"; local branchOrTag="$2";
+#
+#}
