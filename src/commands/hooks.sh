@@ -166,7 +166,7 @@ shu.Hooks.List(){ local _callback="${1:-}"; shift
 shu.Hooks.Remove(){ local index="$1"; shift
     # Load the existing properties from shu.yaml
     if [ ! -f "shu.yaml" ]; then
-        shu.printError "shu.yaml file not found."
+        misc.PrintError "shu.yaml file not found."
         return 1
     fi
 
@@ -207,7 +207,7 @@ shu.Hooks.Run(){ local rwhen="$1"; shift; local rcommandToCheck="$@"
                 shortenedHookCommandString+="..."
             fi
 
-            echo "$(shu.printGreen "Running hook") $_index: $_when $_shuCommandMask -> $shortenedHookCommandString"
+            echo "$(misc.PrintGreen "Running hook") $_index: $_when $_shuCommandMask -> $shortenedHookCommandString"
 
             found=true
             cd "$projectRoot"

@@ -186,7 +186,7 @@ shu.pdeps.Restore(){
         return 1
     fi
 
-    shu.printGreen "Restoring dependencies for project '$SHU_PROJECT_NAME':\n"
+    misc.PrintGreen "Restoring dependencies for project '$SHU_PROJECT_NAME':\n"
 
     restoreErrors=""
     for dep in "${packages[@]}"; do

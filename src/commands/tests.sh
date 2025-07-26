@@ -42,10 +42,10 @@ shu.Tests(){
                 if [ -f "$fName" ]; then
                     files+=("$fName");
                 else
-                    shu.printError "Tests fil for '$arg' ($fName) not found"
+                    misc.PrintError "Tests fil for '$arg' ($fName) not found"
                 fi 
             else
-                shu.printError "tests for '$arg' not found"
+                misc.PrintError "tests for '$arg' not found"
             fi
         fi
     done
@@ -53,7 +53,7 @@ shu.Tests(){
     for file in "${files[@]}"; do
         shu.runTestFile "$file"
         if [ "$_error" != "" ]; then
-            shu.printError "Error running tests file '$file': $_error"
+            misc.PrintError "Error running tests file '$file': $_error"
             return 1
         
         fi
@@ -62,7 +62,7 @@ shu.Tests(){
     for folder in "${folders[@]}"; do
         shu.runFolderTests "$folder" "$recursive"
         if [ "$_error" != "" ]; then
-            shu.printError "Error running tests in folder '$folder': $_error"
+            misc.PrintError "Error running tests in folder '$folder': $_error"
             return 1
         fi
     done
@@ -81,7 +81,7 @@ shu.runFolderTests(){ local directory="$1"; local _recursive=${2:-false}
     for file in $testFiles; do
         shu.runTestFile "$file"
         if [ "$_error" != "" ]; then
-            shu.printError "Error running tests file '$file': $_error"
+            misc.PrintError "Error running tests file '$file': $_error"
         fi
     done
 
@@ -92,7 +92,7 @@ shu.runFolderTests(){ local directory="$1"; local _recursive=${2:-false}
             if [ "$subdir" != "$directory" ]; then
                 shu.runFolderTests "$subdir" true
                 if [ "$_error" != "" ]; then
-                    shu.printError "Error running tests in folder '$subdir': $_error"
+                    misc.PrintError "Error running tests in folder '$subdir': $_error"
                 fi
             fi
         done
@@ -127,8 +127,8 @@ shu.Tests.Summary(){
     shu.CreateHorizontalLine "="
     echo "Tests summary:"
     echo "  Total tests: $((shu_test_successCount + shu_test_failureCount))"
-    shu.printGreen "  Successful tests: $shu_test_successCount\n"
-    shu.printRed "  Failed tests: $shu_test_failureCount\n"
+    misc.PrintGreen "  Successful tests: $shu_test_successCount\n"
+    misc.PrintRed "  Failed tests: $shu_test_failureCount\n"
     echo ""
 
     if [ "$shu_test_failureCount" -gt 0 ]; then

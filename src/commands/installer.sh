@@ -41,7 +41,7 @@ shu.installer.Install(){ local url="$1"; shift
 
     for script in $mainScriptList; do
         if [ ! -f "$script" ]; then
-            shu.printError "error installing command for script '$script'. Script not found in the package. Please check the main section of shu.yaml."
+            misc.PrintError "error installing command for script '$script'. Script not found in the package. Please check the main section of shu.yaml."
             return 1
         fi
         

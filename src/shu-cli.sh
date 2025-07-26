@@ -8,6 +8,9 @@ export SHU_PROJECT_ROOT_DIR="" #setted by shu.Main. if empty, it means that the 
 export SHU_PROJECT_NAME="" #setted by shu.Main. if empty, it means that the current directory is not a shu project
 export SHU_BINARY="$0"
 
+#import misc.sh library
+source "$shu_scriptDir/shellscript-fw/common/misc.sh"
+
 #Common errors
     ERROR_AREADY_DONE="already done"
     ERROR_NO_SHU_DIRECTORY="is not shu project/directory. No shu.yaml found"
@@ -48,7 +51,7 @@ shu.Main(){ local cmd="$1";
     
     shu.checkPrerequisites
     if [ $? -ne 0 ]; then
-        shu.printError "Some dependencies are missing and shu cannot continue: $_error"; _error=""
+        misc.PrintError "Some dependencies are missing and shu cannot continue: $_error"; _error=""
         cd "$SHU_PROJECT_WORK_DIR"
         return 1
     fi
@@ -71,12 +74,12 @@ shu.Main(){ local cmd="$1";
             _error="$err" #detectEnvAndGoRoot clears variable _error
 
             if [[ -n "$_error" && $_error != *"$ERROR_NO_HOOKS_FOUND"* ]]; then
-                shu.printError "Shu error running hooks before command: $_error"; _error=""
+                misc.PrintError "Shu error running hooks before command: $_error"; _error=""
                 cd "$SHU_PROJECT_WORK_DIR"
                 return $retCode
             fi
         else
-            shu.printYellow "Warning: shu hooks module is missing. File '$shu_scriptDir/commands/hooks.sh' not found. Hooks will not be executed.\n" >/dev/stderr
+            misc.PrintYellow "Warning: shu hooks module is missing. File '$shu_scriptDir/commands/hooks.sh' not found. Hooks will not be executed.\n" >/dev/stderr
         fi
     fi
     _error=""
@@ -87,13 +90,13 @@ shu.Main(){ local cmd="$1";
     if [ "$exists" == "true" ]; then
         #run the command from the project
         if [ ! -f "$shu_scriptDir/commands/pcommands.sh" ]; then
-            shu.printError "Shu error:  Error running project command \"$cmd\": pcommands.sh not found in the commands folder."; _error=""
+            misc.PrintError "Shu error:  Error running project command \"$cmd\": pcommands.sh not found in the commands folder."; _error=""
         fi
 
         source "$shu_scriptDir/commands/pcommands.sh" "run" "$cmd" "$@"; local retCode=$?
         cd "$SHU_PROJECT_WORK_DIR"
         if [ "$retCode" -ne 0 ]; then
-            shu.printError "Shu error: Error running project command \"$cmd\": $_error"; _error=""
+            misc.PrintError "Shu error: Error running project command \"$cmd\": $_error"; _error=""
             return 1
         fi
         return $retCode
@@ -111,7 +114,7 @@ shu.Main(){ local cmd="$1";
         retCode=$?
 
         if [ "$_error" != "" ]; then
-            shu.printError "Shu error: $_error"; _error=""
+            misc.PrintError "Shu error: $_error"; _error=""
         fi
         return $retCode
     else
@@ -123,7 +126,7 @@ shu.Main(){ local cmd="$1";
             retCode=$?
             if [ "$retCode" -ne 0 ] || [ "$_error" != "" ]; then
                 
-                shu.printError "Shu error: Error running command '$cmd': $_error";
+                misc.PrintError "Shu error: Error running command '$cmd': $_error";
                 _error=""
                 rm -f /tmp/shu_error.log
                 return 1
@@ -131,7 +134,7 @@ shu.Main(){ local cmd="$1";
             rm -f /tmp/shu_error.log
             cd "$SHU_PROJECT_WORK_DIR"
         else
-            shu.printError "Command '$cmd' not found in your project, nor in the SHU commands. User 'shu pcommand --help' to see the available project commands, or 'shu --help' to see the available SHU commands."; _error=""
+            misc.PrintError "Command '$cmd' not found in your project, nor in the SHU commands. User 'shu pcommand --help' to see the available project commands, or 'shu --help' to see the available SHU commands."; _error=""
             retCode=1
         fi
     fi
@@ -152,12 +155,12 @@ shu.Main(){ local cmd="$1";
             _error="$err"  #detectEnvAndGoRoot clears variable _error
 
             if [[ -n "$_error" && $_error != *"$ERROR_NO_HOOKS_FOUND"* ]]; then
-                shu.printError "Shu error running hooks after commnad: $_error"; _error=""
+                misc.PrintError "Shu error running hooks after commnad: $_error"; _error=""
                 cd "$SHU_PROJECT_WORK_DIR"
                 return $retCode
             fi
         else
-            shu.printYellow "Warning: shu hooks module is missing. File '$shu_scriptDir/commands/hooks.sh' not found. Hooks will not be executed.\n" >&2
+            misc.PrintYellow "Warning: shu hooks module is missing. File '$shu_scriptDir/commands/hooks.sh' not found. Hooks will not be executed.\n" >&2
         fi
     fi
     _error=""
@@ -206,76 +209,6 @@ shu.Main(){ local cmd="$1";
         return $retCode
     }
 
-    shu.printRed(){ local message="$1"; local keepOpened="${2:-}"
-        printf "\033[0;31m$message"
-        if [ "$keepOpened" != "true" ]; then
-            printf "\033[0m"
-        fi
-    }
-
-    shu.printGreen(){ local message="$1"; local keepOpened="${2:-}"
-        printf "\033[0;32m$message"
-        if [ "$keepOpened" != "true" ]; then
-            printf "\033[0m"
-        fi
-    }
-
-    shu.printYellow(){ local message="$1"; local keepOpened="${2:-}"
-        printf "\033[0;33m$message"
-        if [ "$keepOpened" != "true" ]; then
-            printf "\033[0m"
-        fi
-    }
-
-    #prints contextual erros.
-    #erros are nested by ':'
-    #print each erro in a single line
-    #use identation to show nesting
-    shu.printError(){
-        local error="$1"
-        local _currIdentation="$2"
-        local _currPrefix_="${3:-}"
-
-        
-        local currError=""
-
-        if [[ "$error" == *": "* ]]; then
-            currError="${error%%: *}"
-            error="${error#*: }"
-        else
-            currError="$error"
-            error=""
-        fi
-        shu.printError.printSameLevelError "$currError" "$_currIdentation  " "$_currPrefix_"
-        if [[ -n "$error" ]]; then
-            #change prefix of next errors to ': '
-            shu.printError "$error" "$_currIdentation  " "⤷ "
-        fi
-    }
-
-    #same level erros are erros separated by '+' and should be printed in induaviadual lines, but with the same identation
-    shu.printError.printSameLevelError(){
-        local error="$1"
-        local currIdentation="$2"
-        local _prefix_="$3"
-
-        local currError=""
-        if [[ "$error" == *" + "* ]]; then
-            currError="${error%%" + "*}"
-            error="${error#*" + "}"
-        else
-            currError="$error"
-            error=""
-        fi
-
-        #print to stderr
-        shu.printRed "$currIdentation$_prefix_$currError\n" >&2
-        if [[ -n "$error" ]]; then
-            #change prefix of next errors to '+ '
-            shu.printError.printSameLevelError "$error" "$currIdentation" "+ "
-        fi
-    }
-
     shu.getShuProjectRootDir(){
         #look for a .shu folder in the current directory (director of script that called misc.Import). If not found, look in the parent, and so on
         local shuLocation="$(pwd)"
@@ -290,24 +223,6 @@ shu.Main(){ local cmd="$1";
         fi
 
         _r="$shuLocation"
-        return 0
-    }
-
-
-    #return _r with a text that can be printed to the console. The line length is 
-    #defined by tput cols, or 80 if tput is not available.
-    #_print ($2) can be used to control if the line should be printed or not. The
-    #default behavior is to print the line (_print = true).
-    shu.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
-        local _length=$(tput cols 2>/dev/null || echo 80)
-        if [ -z "$_length" ] || [ "$_length" -le 0 ]; then
-            _length=80
-        fi
-
-        _r=$(printf "%${_length}s" | tr ' ' "$_char")
-        if [ "$_print" == "true" ]; then
-            printf "%s\n" "$_r"
-        fi
         return 0
     }
 
@@ -449,7 +364,7 @@ shu.Main(){ local cmd="$1";
     #Initialize a new Shu project in the current directory by creating a shu.yaml file.
     shu.Init(){ local projectName=${1:-$(basename "$(pwd)")}
         if [ -f "./shu.yaml" ]; then
-            shu.printYellow "Warning: This project is already initialized. Redirecting to 'shu restore'.\n"
+            misc.PrintYellow "Warning: This project is already initialized. Redirecting to 'shu restore'.\n"
             shu.Main restore
             return $?
         fi
@@ -506,7 +421,7 @@ shu.Main(){ local cmd="$1";
         #send arguments, bcause shu.Deprestore may need them
         shu.Main pdeps restore $@
 
-        shu.printGreen "Use shu --help to get more information and see the available commands.\n"
+        misc.PrintGreen "Use shu --help to get more information and see the available commands.\n"
 
         #do not need to check sysdepss, because shu.Deprestore already does it
     }
@@ -523,7 +438,7 @@ shu.Main(){ local cmd="$1";
             onlyProject=true
 
             if [ "$SHU_PROJECT_ROOT_DIR" == "" ]; then
-                shu.printError "help with -p/--project-only (show only project commands help) is only available inside a shu project folder."
+                misc.PrintError "help with -p/--project-only (show only project commands help) is only available inside a shu project folder."
                 return 1
             fi
         fi
@@ -544,7 +459,7 @@ shu.Main(){ local cmd="$1";
         }; __f'
 
         #just reduce the lines above
-        helpItem(){ output+=$(shu.printHelpLine "$1"); }
+        helpItem(){ output+=$(misc.PrintHelpLine "$1"); }
 
         helpItem "Shu CLI version $SHU_VERSION - A package manager and project automation system."
         if $onlyProject; then
@@ -553,11 +468,11 @@ shu.Main(){ local cmd="$1";
             helpItem "\n"
         fi
 
-        helpItem "$(shu.printGreen Usage):\n"
+        helpItem "$(misc.PrintBold Usage):\n"
         #check if pCommands is empty
         if [ ${#pCommands[@]} -eq 0 ]; then
             if $onlyProject; then
-                shu.printError "You are trying to se only project commands help, but project '$SHU_PROJECT_NAME' does not have commands."
+                misc.PrintError "You are trying to se only project commands help, but project '$SHU_PROJECT_NAME' does not have commands."
                 return
             else
                 helpItem "  shu <command> [options]\n"
@@ -572,7 +487,7 @@ shu.Main(){ local cmd="$1";
 
         if ! $onlyProject; then
             helpItem "\n"
-            helpItem "$(shu.printGreen "Shu commands"):\n"
+            helpItem "$(misc.PrintBold "Shu commands"):\n"
             helpItem "  init [projectName] [options]\n"
             helpItem "                           - Initialize a new Shu project in the current directory.\n"
             helpItem "    options:\n"
@@ -609,14 +524,14 @@ shu.Main(){ local cmd="$1";
 
             local projectNameBold=$(printf "\033[1m%s\033[0m" "$SHU_PROJECT_NAME")
 
-            helpItem "$(shu.printGreen "Project $projectNameBold ")$(shu.printGreen "Commands (commands registered in current shu.yaml file)"):\n"
+            helpItem "$(misc.PrintBold "Project $projectNameBold ")$(misc.PrintGreen "Commands (commands registered in current shu.yaml file)"):\n"
             for pCommand in "${pCommands[@]}"; do
                 helpItem "  $pCommand\n"
             done
         fi
 
         if ! $onlyProject; then
-            helpItem "\n\n$(shu.printGreen "Additional information about Shu"):\n" 
+            helpItem "\n\n$(misc.PrintBold "Additional information about Shu"):\n" 
             helpItem "  - Shu initially was focused on shellscripting, but it was changed over the time and, now, shu can work with (almost) any kind of software project, managing packages from git repositories and automating the project with commands, hooks and more.\n"
             helpItem "  - If you are hooking a command or writing commands for you project, shu exports some variables:\n"
             helpItem "    - SHU_PROJECT_ROOT_DIR: The root directory of the project. It is the directory where the shu.yaml file is located.\n"
@@ -636,7 +551,7 @@ shu.Main(){ local cmd="$1";
     #uses tput to get the size of the terminal and prints a help line with the given text.
     #if line is to long, it will be split and idented.
     #Identation position is calculated by finding the last sequence of two spaces in the line.
-    shu.printHelpLine(){ local line="$1"
+    misc.PrintHelpLine(){ local line="$1"
         #find the '|-' sequence in the line
         #optional |- sequence (remove from final string)
         local sub="|-"

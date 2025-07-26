@@ -995,6 +995,20 @@ misc.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
         fi
     }
 
+    misc.PrintBold(){ local message="$1"; local keepOpened="${2:-}"
+        printf "\033[1m$message"
+        if [ "$keepOpened" != "true" ]; then
+            printf "\033[0m"
+        fi
+    }
+
+    misc.PrintItalic(){ local message="$1"; local keepOpened="${2:-}"
+        printf "\033[3m$message"
+        if [ "$keepOpened" != "true" ]; then
+            printf "\033[0m"
+        fi
+    }
+
     #prints contextual erros.
     #erros are nested by ':'
     #print each erro in a single line

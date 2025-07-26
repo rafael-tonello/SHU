@@ -24,7 +24,7 @@ shu.Runtool(){ local scriptName="$1"; shift
 
         shu.runScript "$script" "$@"
         if [ "$_error" != "" ]; then
-            shu.printError "error running script '$script': $_error"
+            misc.PrintError "error running script '$script': $_error"
             return 1
         fi
     done

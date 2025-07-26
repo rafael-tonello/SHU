@@ -69,7 +69,7 @@ shu.MainFiles.Run(){ local scriptName="$1"; shift
     if [ "$scriptName" != "" ]; then
         shu.runScript "$scriptName" "$@"
         if [ "$_error" != "" ]; then
-            shu.printError "Shu error: $_error"
+            misc.PrintError "Shu error: $_error"
             return 1
         fi
     else
@@ -83,7 +83,7 @@ shu.MainFiles.Run(){ local scriptName="$1"; shift
         for script in $mainScriptList; do
             shu.runScript "$script" "$@"
             if [ "$_error" != "" ]; then
-                shu.printError "Shu error: $_error"
+                misc.PrintError "Shu error: $_error"
             fi
         done
     fi      

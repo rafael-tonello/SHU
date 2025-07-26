@@ -109,7 +109,7 @@ shu.psysdeps.Add(){
 shu.psysdeps.Check(){
     shu.getValueFromArgs_manyNames "--level -l" "0" "$@"; local level="$_r"
 
-    shu.printGreen "Checking system dependencies for your project:\n"
+    misc.PrintGreen "Checking system dependencies for your project:\n"
 
     checkFoundDeps=0
     local missing=()
