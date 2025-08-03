@@ -871,7 +871,7 @@ SHU_MISC_LOADED=true
 
     #IWorker is a class of works that can run by themselves, like a thread.
     #This class is hight dependent of Schedule library (shu/src/shellscript-fw/common/scheduler).
-    #IWorkder{
+    #IWorker{
         #Receives a 'Scheduler' object to be able to schedule its work.
         IWorkder.Init(){ _error="Not implemented"; return 1; }
     #}
@@ -1031,7 +1031,7 @@ misc.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
         misc.PrintError.printSameLevelError "$currError" "$_currIdentation  " "$_currPrefix_"
         if [[ -n "$error" ]]; then
             #change prefix of next errors to ': '
-            shu.printError "$error" "$_currIdentation  " "⤷ "
+            misc.PrintError "$error" "$_currIdentation  " "⤷ "
         fi
     }
 
@@ -1109,6 +1109,9 @@ misc.parseOptions(){
                 key="$arg"
                 value="${!i}"; ((i++))
             fi
+
+            #replace '-' by '_' in key
+            key="${key//-/_}"
 
             o.Get "$obj" "$key"; local existingValue="${_r[@]}"
             o.Set "$obj" "$key" "${existingValue[@]}" "$value"
