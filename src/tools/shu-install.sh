@@ -38,7 +38,7 @@ fi
 #create temporary directory
 rm -rf /tmp/shu-install
 mkdir -p /tmp/shu-install
-cd /tmp/shu-installcurl 
+cd /tmp/shu-install
 #wget https://github.com/rafael-tonello/SHU/archive/refs/heads/main.zip 
 curl -sSL https://github.com/rafael-tonello/SHU/archive/refs/heads/main.zip -o main.zip
 unzip main.zip
