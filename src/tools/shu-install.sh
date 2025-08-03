@@ -19,7 +19,7 @@ if $fail; then
 fi
 
 
-
+needLnWithSudo=false
 binDir="$HOME/.local/bin"
 if [ ! -d "$binDir" ]; then
     binDir="~/.local/bin"
@@ -29,6 +29,7 @@ if [ ! -d "$binDir" ]; then
 
         binDir="/usr/local/bin"
         if [ ! -d "$binDir" ]; then
+            needLnWithSudo=true
             binDir="/usr/bin"
         fi
     fi
@@ -48,9 +49,9 @@ if [ "$?" -ne 0 ]; then
 fi
 cd SHU-main
 
-rm -rf ~/.local/shu
-mkdir -p ~/.local/shu
-cp -r src/* ~/.local/shu
+rm -rf $HOME/.local/shu
+mkdir -p $HOME/.local/shu
+cp -r src/* $HOME/.local/shu
 if [ "$?" -ne 0 ]; then
     printError "Failed to copy Shu CLI files. Please check permissions or try running with sudo."
     exit 1
@@ -64,7 +65,7 @@ fi
 #fi
 
 # make the shu command executable
-chmod +x ~/.local/shu/shu-cli.sh
+chmod +x $HOME/.local/shu/shu-cli.sh
 if [ "$?" -ne 0 ]; then
 
     printError "Failed to make shu-cli.sh executable. Please check permissions or try running with sudo."
@@ -73,8 +74,18 @@ fi
 
 
 rm -f $binDir/shu
-ln -sf ~/.local/shu/shu-cli.sh $binDir/shu
-if [ "$?" -ne 0 ]; then
+echo 'ln -sf '$HOME'/.local/shu/shu-cli.sh $binDir/shu'
+retcode=1
+if $needLnWithSudo; then
+    echo "Creating symbolic link for shu command in $binDir with sudo..."
+    sudo ln -sf "$HOME/.local/shu/shu-cli.sh" "$binDir/shu"
+    retcode=$?
+else
+    ln -sf "$HOME/.local/shu/shu-cli.sh" "$binDir/shu"
+    retcode=$?
+fi
+
+if [ "$retcode" -ne 0 ]; then
     printError "Failed to create symbolic link for shu command. Please check permissions or try running with sudo."
     exit 1
 fi
