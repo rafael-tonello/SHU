@@ -29,9 +29,9 @@ if [ ! -d "$binDir" ]; then
 
         binDir="/usr/local/bin"
         if [ ! -d "$binDir" ]; then
-            needLnWithSudo=true
             binDir="/usr/bin"
         fi
+        needLnWithSudo=true
     fi
 fi
 
@@ -73,14 +73,13 @@ if [ "$?" -ne 0 ]; then
 fi
 
 
-rm -f $binDir/shu
-echo 'ln -sf '$HOME'/.local/shu/shu-cli.sh $binDir/shu'
 retcode=1
 if $needLnWithSudo; then
-    echo "Creating symbolic link for shu command in $binDir with sudo..."
+    sudo rm -f $binDir/shu
     sudo ln -sf "$HOME/.local/shu/shu-cli.sh" "$binDir/shu"
     retcode=$?
 else
+    rm -f $binDir/shu
     ln -sf "$HOME/.local/shu/shu-cli.sh" "$binDir/shu"
     retcode=$?
 fi
