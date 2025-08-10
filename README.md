@@ -1,400 +1,709 @@
-Shu: A Shell Script Framework and Package Manager
-# What is Shu?
-Shu is a shell script framework and package manager that makes it easy to write and share shell scripts. It provides a simple way to manage dependencies, install packages, and run scripts.
+# SHU (Shell Script Utils)
 
-# What I can do with aaa
-* You can use and write libraries in shellscript, use it in you projects and share it with others.
-* You can import existing shellscript projects, files and other git repositories.
-* You can build you project in a single .sh file, which can be used as a standalone script.
-* You can write and use libraries (packages) to share and reuse code.
+**SHU** is a command-line tool that acts as a **package manager**, **automation system**, and **shell scripting framework** for software projects.
 
-# developng hooks and commands
-SHU_BINARY variable and source + shu.Main
+# Table of Contents
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [Installation](#installation)
+- [Getting Started](#getting-started)
+  - [Initialize a New Project](#1-initialize-a-new-project)
+  - [Add a Dependency](#2-add-a-dependency)
+  - [Add a Hook](#3-add-a-hook)
+  - [Project Commands](#4-project-commands)
+- [Concepts](#concepts)
+  - [Project Initialization](#1-project-initialization)
+  - [Dependencies](#2-dependencies)
+  - [Project Commands](#3-project-commands)
+  - [Hooks](#4-hooks)
+  - [Properties](#5-properties)
+  - [System Dependencies](#6-system-dependencies)
+  - [Main Script Handling](#7-main-script-handling-deprecated)
+  - [Built-in Shell Script Framework](#8-built-in-shell-script-framework)
+- [Project Initialization](#project-initialization)
+  - [Create a New Project](#1-create-a-new-project)
+  - [Using a Template](#2-using-a-template)
+  - [shu.yaml Overview](#3-shuyaml-overview)
+  - [Reinitializing or Resetting](#4-reinitializing-or-resetting)
+- [Managing Dependencies](#managing-dependencies)
+  - [Add a Dependency](#1-add-a-dependency)
+  - [Restore Dependencies](#2-restore-dependencies)
+  - [Clean Dependencies](#3-clean-dependencies)
+- [Shu CLI Help text](#shu-cli-help-text)
 
-# Getting Started
-Install Shu
-To install Shu, simply clone this repository and add the shu script to your system's PATH.
+# Overview
 
-or use the following command to install it directly from the repository:
+Originally designed for shell scripting, SHU has evolved into a powerful tool to **automate, organize, and scale any kind of software project** — whether it’s a shell-based tool, a C++ server, or a hybrid system.
+
+At its core, SHU helps you:
+
+- Manage packages from Git or archive sources
+- Define and run project-specific CLI commands
+- Hook actions before or after commands (for automation)
+- Write structured and reusable shell automation scripts
+
+It also includes a **built-in shell scripting framework** — specifically designed for:
+- Writing project automation logic
+- Building server-side workflows
+- Creating modular, object-oriented Bash code
+- Scheduling periodic tasks, monitoring git state, and more
+
+Whether you're managing deployment tasks, writing helper commands, or wiring up build pipelines, SHU provides structure and extensibility for your project’s automation needs.
+
+
+# Key Features
+
+- 🧩 **Package Management**  
+  Fetch project dependencies from Git or archive URLs with fine control over path, branch, and naming. Restore and clean them with ease.
+
+- ⚙️ **Project Commands**  
+  Define CLI commands specific to your project using Bash scripts, integrated with SHU’s command system.
+
+- 🔁 **Hooks System**  
+  Automate actions before or after any SHU or project command — ideal for installing Git hooks, post-build steps, deployment, etc.
+
+- 📦 **Template-Based Initialization**  
+  Start projects from Git repos or archive templates, supporting selective folder extraction and recursive dependency restore.
+
+- 🧪 **Built-in Test Runner**  
+  Locate and execute `.tests.sh` files across your project for quick and automated testing.
+
+- 📁 **Main Script Handling**  
+  Define entry points for running or building your project with `shu run` or `shu build`.
+
+- 🧠 **Project Properties System**  
+  Store and access custom key-value config and structured data within your `shu.yaml`.
+
+- 🔐 **System Dependency Declaration**  
+  Declare and validate required system binaries for your project to function properly.
+
+- 🐚 **Shell Script Framework (OOP in Shell!)**  
+  Bring object-orientation, interfaces, logging, scheduling, streams, and more to shell scripts.
+
+---
+
+# Installation
+
+To install SHU on your system, just run the following command:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/rafael-tonello/SHU/main/src/tools/shu-install.sh | bash
 ```
+This script will:
 
-Initialize a New Project
-To start a new project, run:
+* Download the latest version of SHU from the official repository
+
+* Place it in your $HOME/.local/bin (or a custom path if set)
+
+* Ensure it’s executable and available in your terminal
+
+After installation, you can verify it's working:
+```bash
+shu --version
+```
+
+If everything is set up correctly, you'll see the current SHU version printed.
+
+
+# 🚀 Getting Started
+This section will guide you through the basic usage of SHU (Shell Script Utils) — from initializing a project to running your first hook and project commands.
+
+## 1. Initialize a New Project
+To create a new SHU project in your current directory:
 
 ```bash
-shu init myproject
-```
-This will create a new directory called myproject with a basic shu.yaml file and a main.sh script.
-
-
-## Basic Commands
-Here are some basic commands to get you started:
-
-shu init [name]: Initialize a new Shu project.
-shu get [package]: Retrieve a package and add it to your project's dependencies.
-shu run [file]: Run a script or all scripts in your project's main section.
-shu install [package]: Install a package system-wide.
-How it Works
-Shu uses a simple YAML file called shu.yaml to manage your project's dependencies and scripts. When you run a command, Shu reads the shu.yaml file and performs the necessary actions.
-
-
-## Some commands calls vs what its does
-'shu init' in a no shu folder:
-    * Creates a shu project (create a shu.yaml file)
-    * add the dependency shellscript-fw/common using 'shu get' command
-
-
-'shu init' in an existing shu folder: 
-    * redirects to 'shu restore' command, that will:
-        * restore all packages dependencies of project
-        * redirects to 'shu psysdeps check' command, that will:
-            * check all system commands dependencies registered in the shu.yaml file
-            * check all system dependencies registered in the shu.yaml file
-
-'shu get' (with no args):
-    * redirects to 'shu restore' command, that will:
-        * restore all packages dependencies of project
-        * redirects to 'shu psysdeps check' command, that will:
-            * check all system commands dependencies registered in the shu.yaml file
-            * check all system dependencies registered in the shu.yaml file
-
-'shu restore': 
-    * restore all packages dependencies of project
-    * redirects to 'shu psysdeps check' command, that will:
-        * check all system commands dependencies registered in the shu.yaml file
-        * check all system dependencies registered in the shu.yaml file
-
-'shu get' with 'git repo':
-    * download the repository to ./.shu/packages/<repo>
-    * register the 'git repo' as a dependency in the shu.yaml file
-
-'shu get' with 'git repo#path/to/folder'
-    * clone the repository
-    * copy folder 'path/to/folder' to ./.shu/packages/<repo>
-    * register the 'git repo#path/to/folder' as a dependency in the shu
-
-'shu get' with 'git repo#path/to/folder as alias':
-    * clone the repository
-    * copy folder 'path/to/folder' to ./.shu/packages/<alias>
-    * register the 'git repo#path/to/folder as alias' as a dependency in the shu.yaml file
-
-
-
-
-will read the shu.yaml file and run 'shu get' for each dependency in the 'pdeps' section. After, will redirects to 'shu psysdeps check', that will check of commands and other system dependencies.
-
-'shu psysdeps check': will check if the system has the required commands and dependencies for the project. It will print a list of missing commands and dependencies. 
-
-
-
-
-
-
-# Examples
-Before diving int the details, let's look at some examples of how to use aaa.
-
-## example 1 - Initing a basic project
-```sh
-shu init 'my project'
-# this will create somes files and folders in the current directory:
-# - my_project/
-#   +->.shu/
-#   |  +->packages/
-#   |       +->shu-misc/
-#   |           +->misc.sh (this is a basic library of Shu, and allow the easy import 
-#   |                       of other libraries)
-#   +->shu.yaml (This is the shu project file. It holds the packages of the 
-#   |            ct, the main scripts and other metadata.)
-#   +->main.sh (This is a basic script. You can start writting your code here.)
-
-#main file content:
-# !/usr/bin/env shu
-# source ./shu/packages/shu-misc/misc.sh
-# echo "Hello, world!"
-
-./main.sh
-
-#this will print to the console:
-#$ Hello, world!
+shu init
 ```
 
-## example 2 - Importing a library
-Initing the project and importing a library
-```sh
-shu init 'my project'
-
-#import log library from shu repository
-shu get "https://github.com/rafael-tonello/shu.git#src/shellscript-fw/log as ShuLogger"
-```
-
-main file content
-```sh
-# !/usr/bin/env shu
-
-#this is the basic library of SHU, and allow some useful functions. The importation occurs in the correct path, no matter where the script is executed.
-source "$(dirname "${BASH_SOURCE[0]}")/.shu/packages/shu-misc/shu-misc.sh"
-
-#import is a function from shu-misc, and allow you to easy sorce packages files (without need to source using the whole package path)
-Import ShuLogger
-
-#by default, _r is the used to return results from functions, avoiding spawning subshells.
-log.New; log="$_r"
-
-log.Info "main" "Hello, world!"
-
-#this will print to the console something like:
-#$ [ 20205-06-05 12:00:00.000][INFO][main] Hello, world!
-
-```
-
-This will create a new project called myscript, add the logger package as a dependency, write a simple script that uses the logger package, and run the script.
-
-#Contributing
-Contributions are welcome! If you'd like to contribute to Shu, please fork this repository and submit a pull request.
-
-# How it works
-## getting packages
-Shu uses a simple YAML file called shu.yaml to manage your project's dependencies and scripts and .shu folder to store downloaded packages.
-Packages can have its own shu.yaml, that will be read by shu and will have its own dependencies and scripts dowloaded (to its own .shu folder).
-
-.shu folder can be deleted, and you can easyly restore it by running the command 'shu restore' or 'shu get' (with no args, shu get redirects to shu restore).
-# License
-Shu is licensed under the MIT License.
-
-# Programming using Framework
-Shu in addition to being a package manager CLI for shellscripting, it is also a framework for shell scripting. The SHU code contains some libraries that can be used to write shell scripts in a more structured way, allowing you to use object orientation, interfaces, and other programming concepts. And it have some important conventions that should be noticed, that is described below.
-
-## Important concepts and conventions
-To lead with the limitations of shell scripts, Shu uses some conventions and concepts that are important to understand when working with it.
-
-Understanding these concepts is importante to effectively use Shu and to a further dive into its features.
-
-* _r: Default return variable. To avoid spawning subshells and to allow returing values from functions, Shu uses the variable _r to return results.
-* _error: The variable _error is used to return error messages from functions. You can use ':' to add context to error. A function should return an error or print it, but should avoid both. Also functions should return normal shellscript return codes. Also, if a function prints the error, it should not return it.
-* object orientation:
-    * In the memory, objects are groups of variables that starts with a common prefix.
-    * Classes and methods uses objects references (that are a prefix used by a group of variables).
-    * classes are functions that receive an 'object' as the first parameter.
-    * classes methods should be named <className>.<methodName>.
-    * misc.sh contains functions to operate objects
-        * o.New: creates a new object, returning it (the reference) in the _r variable.
-        * o.Get: gets a property from an object, returning it in the _r variable.
-        * o.Set: sets a property in an object. Multiple arguments will be set as an array.
-        *o.Has: checks if an object has a property, returning true or false in the _r variable.
-        * o.Delete: deletes a property from an object.
-        * o.Destroy: destroys an object, deleting all its properties. If second argument is 'true', it will also delete all child obejects.
-        * o.Implements: checks if an object (or class) implements a interface (another class).
-        * o.Call: calls a method of an object. Shu will look for the className and call the function <className>.<methodName> with the object reference as the first parameter and the rest of arguments passed to the o.Call as remain arguments.
-    * Shu uses 'duck typing'
-    * To create objects, classes tipically implements a method called New (<className>.New). But you can use other functions. The functions that creates objects should return the object reference in the _r variable.
-
-When you use 'shu init' or 'shu touch' command, the created file will have a important import line at the top, that sources the misc.sh file, allowing you to use the object manipulation functions.
+Or specify a project name:
 
 ```bash
-#Interface IGreeter
-    IGreeter.Greet(){ :; }
-
-
-#MyClass definition
-    MyClass.New(){
-        if [ $# -ne 2 ]; then
-            _error="MyClass.New: expected 2 arguments, got $#"
-            return 1
-        fi
-
-        o.New MyClass; local ref="$_r"
-        o.Set $ref name "$1"
-        o.Set "$ref.age" "$2" #you can use object notation
-
-        unset _error
-        _r="$ref" #return the object reference
-    }
-
-    MyClass.Greet(){
-        local ref="$1"
-        if ! o.Has "$ref" name; then
-            _error="MyClass.Greet: object '$ref' does not have a 'name' property"
-            return 1
-        fi
-        echo "Hello, $(o.Get "$ref" name)!"
-    }
-
-
-# Example of using the class
-    MyClass.New "Rafael" 30; local instance="$_r"
-    if [ ! -z "$_error" ]; then
-        echo "Error creating MyClass instance: $_error"
-        exit 1
-    fi
-
-    if o.Implements "$instance" IGreeter; then
-        o.Call "$instance.Greet"
-
-        myClass.Greet "$instance" # also works. In this case, the function is called directly.
-    else
-        echo "MyClass does not implement IGreeter: $_error"
-        exit 1
-    fi
+shu init MyProject
 ```
-
-# SHU Misc
-The SHU misc library is automatically downloaded and sourced when you run the 'shu init' command. Also, when you create a file using the 'shu touch' command, it will automatically source the misc library, allowing you to use its functions in your scripts.
-
-The misc library is the most important library of SHU Framework, and allow a lot of useful features, such as:
-* Object manipulation functions (o.New, o.Get, o.Set, o.Has, o.Delete
-* Error printing
-* the 'import' command
+💡 This will create a .shu/ directory and a shu.yaml file to configure your project.
 
 
-## Import command
-The import command is a function that allows you to easily source files from packages. It does some magic tricks and telepathies to try to guess where the package files are located, that is inside .shu folder :p.
 
-Import will look inside .shu folder for packages and files and, if you pass the argument '--allow-subpackages', it will also look inside .shu folders of the packages.
+## 2. Add a Dependency
+SHU allows you to easily include reusable components, templates, or libraries as dependencies:
 
-# More about SHU
-## Shu command line
-The shu command line is a shellscript framework and package manager for shellsripting. It allows programmers to easily user schellscript based packages, as well as to create their own packages and share them with others.
-
-Shu contains commands to retrieve packages for you shellscripts projects, to install packages in your system and much more. 
-
-Shu command line was inspired by 'go command line'.
-
-## Shu Projet structure
-    ./shu.yaml  -> shu information
-    ./.shu      -> shu cache
-
-## Some conventions
-Bashscripts are a well know limitation for conventional programming. For example, function returns are projected to return error codes, instead of values. To lead with it, shu uses some conventions to make it easier to work with shell scripts:
-
-* _r: The variable _r is used to return values from functions. It is a convention that allows you to avoid spawning subshells and makes it easier to work with shell scripts.
-* _r2, _r..., _rN: Adicional returns, for multiple returns. Do not forget to uset the variables do prevent memory leaks.
-* _r_[name]: named return codes. Do not forget to uset the variables do prevent memory leaks.
-* _error: The variable _error is used to return error messages from functions. Should ever follow the conventional error code returning.
-## Shu commands
-
-### shu init
 ```bash
-shu ini <projectName>
+shu get https://github.com/rafael-tonello/SHU.git@main#/src/libs/shu-common
 ```
-Initializes a shu project in the current folder. It creates a shu.yaml file, runs 'shu get shu-misc' and creates a file called 'main.sh' with a simple example of how to use shu.
+This installs the dependency into .shu/deps/ and makes its components available in your project.
 
-This command is not mandatory, and the shu files will be created if when you call other shu commands, but it is utils when you want to start a new project with a simple example.
+## 🔗 3. Add a Hook
 
-the 'name' parameter is optional, and if it is not present, the current folder name will be used as project name.
+SHU includes a built-in command for managing hooks — no need to edit `shu.yaml` manually.
 
-### shu touch
+A hook lets you run a command **before** or **after** a specific SHU command is executed (including your own custom project commands).
+
+---
+
+### ➕ Add a New Hook
+
+The syntax is:
+
 ```bash
-shu touch <file[.sh]> [options]
-options:
-    --addmain: Add the file to the 'main' section of shu.yaml.
+shu hooks add <when> <shu-command> <command>
 ```
-Creates a new script in the current project. If you specify a name with no .sh extension, it will be added automatically. If you want to add the file to the 'main' section of shu.yaml, you can use the --addmain option.
+* \<when\> - Either before or after the target SHU command.
 
-The new will file will be generated with a line sourcing the shu-misc package, allowing you to use basic shu commands in your script.
+* \<shu-command\> - The command that triggers the hook (without the shu prefix).
 
-### shu mainfile sub-cli
-Shu projects can have one or more main files. Manage it requires some commands that we decided to group in a sub-command called 'mainfile'.
+* \<command\> - The Bash command or script to run.
 
-#### shu mainfile add 'file'
-Add 'file' to the 'main' section of shu.yaml file. If shu.yaml does not exists, it will be created. If 'file' is a list, all files will be added to the 'main' section.
-
-#### shu mainfile remove 'file'
-Remove 'file' from the 'main' section of shu.yaml file. If shu.yaml does not exists, it will be created. If 'file' is a list, all files will be removed from the 'main' section.
-
-#### shu mainfile list
-List all files in the 'main' section of shu.yaml file. If shu.yaml does not exists, it will be created.
-
-#### shu mainfile run [file]
-* if .shu folder does not exists, run 'shu restore'
-* Run the [file] or read shu.yaml and run all files specified by 'shu addmain'
-> You can use shu run, that is an alias for 'shu mainfile run' inspirated by 'go run' command.
-
-### shu run
-Shu run is an alias for 'shu mainfile run'. It is used to run the main files of the current project. If no file is specified, it will run all files in the 'main' section of shu.yaml file. It was inspired by the 'go run' command.
-
-### shu pdeps sub-cli
-As ocurros with 'shu mainfiles', manage dependencies also requires some commands that wi decided to group in a sub-command called 'pdeps'.
-
-#### shu pdeps add 'package'[@version][#/path/to/folder]
-Installs (clones) a package in the current project:
-
-* run 'git clone 'package' ./.shu/packages/'package'
-* run 'shu restore inside ./.shu/packages/'package'
-* if [@version] is present, run 'git checkout @version'
-* if [#/path/to/folder/ is present, only the subfolder 'path/to/folder' will be cloned.
-
-> you can use 'shu get', that is an alias for 'shu pdeps add' inspirated by 'go get' command.
+For scripts that need access to SHU’s memory context, use source ./yourscript.sh instead of ./yourscript.sh.
 
 
-#### shu pdeps remove
-Removes a package from the current project:
-* removes the package from the 'pdeps' section of shu.yaml file
-* removes the package folder from ./.shu/packages/'package'
+#### Example: Run a script after a dependency is installed
+```bash
+mkdir -p scripts
+echo -e '#!/bin/bash\necho "Post-installation script triggered!"' > scripts/after-install.sh
+chmod +x scripts/after-install.sh
 
-#### shu pdeps list
-Lists all packages in the 'pdeps' section of shu.yaml file. 
+shu hooks add after "get" " ./scripts/after-install.sh"
+```
 
-### shu get
-Shu get is an alias for 'shu pdeps add'. It is used to retrieve a package and add it to the 'pdeps' section of shu.yaml file. If the package is already present, it will not be added again. The 'shu get' command was inspired by the 'go get' command, and it is used to retrieve packages. But, unlink 'go get', the packages are installed in you project instead of in your system.
+Now, whenever you run `shu get`, the `after-install.sh` script will execute after the dependency is fetched.
+
+## 🛠️ 4. Project Commands
+
+SHU allows you to define **custom project commands** so your team can run automation tasks in a consistent way — without needing to remember long Bash commands.
+
+Project commands are managed with:
+
+```bash
+shu pcommand <subcommand>
+```
+
+### ➕ Add a Project Command
+```bash
+shu pcommand add <name> <command> <description>
+```
+* <name> — The name you’ll use to run the command (e.g., build → shu build).
+
+* <command> — The Bash command or script to execute.
+
+* <description> — A short description shown in shu --help.
+
+Example:
+
+```bash
+shu pcommand add build "bash scripts/build.sh" "Build the project"
+```
+After adding it:
+
+```bash
+shu build
+```
+will run bash scripts/build.sh.
+
+### 📋 List Project Commands
+```bash
+shu pcommand list
+```
+Options:
+* --one-line — Display each command in a single line.
+* callback <callback> — Call a custom callback script for each command (receives <name> <command> <description>).
+
+### ❌ Remove a Project Command
+```bash
+shu pcommand remove <name>
+```
+
+### ▶️ Run a Project Command Manually
+While you can simply run shu <name>, you can also explicitly call:
+
+```bash
+shu pcommand run <name> [args...]
+```
+
+# 📚 Concepts
+
+Before diving deeper into SHU’s commands, it’s important to understand the core concepts that make up a SHU-powered project.  
+These ideas define how SHU organizes automation, manages dependencies, and structures shell scripting.
+
+---
+
+## 1. Project Initialization
+Every SHU project is defined by a `.shu/` directory and a `shu.yaml` configuration file.  
+Initialization sets up the foundation for:
+
+- Tracking dependencies
+- Registering project commands
+- Storing hooks
+- Managing project properties
+
+Once initialized, you can start adding automation and dependencies without manually editing `shu.yaml`.
+
+---
+
+## 2. Dependencies
+SHU treats **dependencies** as reusable packages — they can be shell libraries, templates, or entire projects.  
+
+- **Source types:** Git repositories, local folders, or archive files (tar, zip).
+- **Location:** Stored in `.shu/deps/` and referenced by your scripts.
+- **Restore/Clean:** You can re-fetch all dependencies or remove them entirely when needed.
+
+Dependencies make it easy to share reusable scripts and automation logic across multiple projects.
+
+---
+
+## 3. Project Commands
+Instead of remembering long shell commands, SHU lets you define **named commands** for your project.  
+Example:  
+```bash
+shu build
+```
+…could run a complex build script without the developer needing to know its exact path or parameters.
+
+### Project commands:
+
+* Have a name, a command, and a description
+
+* Are stored in your project configuration
+
+* Can be listed, removed, or run explicitly
+
+## 4. Hooks
+Hooks are automation triggers that run before or after specific SHU or project commands.
+
+Examples:
+
+prints a message after the build command
+```bash
+shu hooks add after build "echo 'Build completed!'"
+```
+runs tests before the build command
+```bash
+shu hooks add before build "shu tests --run"
+```
+Deploy artifacts after shu install
+```bash
+shu hooks add after install "bash scripts/deploy.sh"
+```
 
 
-### shu restore
-read all 'pdeps' on 'shu.yaml' file and run 'shu get "pdeps"' for each dependency
+You can hook into any SHU command (including custom ones) without modifying the command itself.
 
-### shu install 'package'
-* run "git clone 'package' ~/.local/shu/installed/'package'"
-* run "shu restore" in ~/.local/shu/installed/'package'
-* read ~/.local/shu/installed/'package'/shu.yaml and create symbolic links for all 'main' files, making it available in you system. The symbolic links are put in ~/.local/shu/bin
-* ~/.local/shu/bin are added to you PATH (.bashrc will be changed)
+## 5. Properties
+Properties are key-value settings stored in shu.yaml.
+They allow you to define configuration values that your scripts can read at runtime — for example:
 
-#### shu install .
-Install the current project in your system.
+API keys
 
-### shu uninstall 'package'
-Uninstalls a package from your system. It removes the symbolic links created by 'shu install', and removes the package from ~/.local/shu/installed.
+Project metadata
 
-## inside scripts
-### shu.source 'package'
-source all 'package'/shu.yaml 'main' files
+Environment-specific values (should/can be loaded by your scripts)
 
-### shu.source 'package' -f 'main.sh'
-source 'main.sh' file from 'package' folder
+Properties keep your scripts flexible and configurable.
+
+## 6. System Dependencies
+System dependencies are binaries or tools your project requires to function (e.g., git, make, docker).
+You can declare them in SHU so that it automatically checks they exist before running some of your project commands (like shu init and shu restore).
+
+Examples:
+```bash
+#adding git as a required system dependency
+shu psysdeps add git "Git is required for fetching dependencies"
+```
+This ensures that anyone working on your project has the necessary tools installed.
+
+```bash
+#checking if all system dependencies are met
+shu psysdeps check
+```
+This will verify that all declared system dependencies are available.
+
+```bash
+#listing all declared system dependencies
+shu psysdeps list
+```
+This will show all the system dependencies your project requires.
+
+
+## 7. Main Script Handling (deprecated)
+SHU supports defining a main file (or entry point) for your project.
+This is what runs when you execute:
+
+```bash
+shu run
+```
+
+```bash
+shu build
+```
+This standardizes how developers interact with your project.
+
+## 8. Built-in Shell Script Framework
+SHU includes an Object-Oriented Shell Scripting Framework with utilities like:
+
+* Classes & interfaces
+* Logger and stream handling
+* Scheduler for periodic tasks
+* Git monitor for repository changes
+* Prebuilt utility libraries
+
+
+This framework enables you to write large, structured shell-based automation without the chaos of ad-hoc scripts.
+
+# 📂 Project Initialization
+
+Initializing a SHU project sets up the base structure and configuration files so you can start managing dependencies, hooks, and automation scripts right away.
+
+## 1. Create a New Project
+To initialize SHU in your current directory:
+
+```bash
+shu init
+```
+
+```bash
+shu init MyProject
+```
+This will:
+
+*Create a .shu/ directory for SHU’s internal data
+*Generate a shu.yaml configuration file
+*Prepare empty folders for dependencies and scripts
+
+## 2. Using a Template
+You can initialize a project from a Git repository or an archive (e.g., .tar.gz, .zip):
+
+```bash
+shu init https://github.com/username/project-template.git
+```
+You can also point to a subdirectory in the template:
+
+```bash
+shu init https://github.com/username/project-template.git#/template/subdir
+```
+This is useful for starting with a pre-built structure, boilerplate code, or a company-specific setup.
+
+## 3. shu.yaml Overview
+After initialization, your shu.yaml will contain the basic project configuration:
 
 ```yaml
-# shu.yaml example
-project: shu-example
-
-main:
-  - main.sh
-
-pdeps:
-    - obj #looks in 'shu repository'
-    - http://git/repository/url.git@aabbcc #looks in 'git repository'
-    - http://git/repository/url.git@aabbcc#path/to/subfolder #looks in 'git repository'
+name: MyProject
+version: 0.1.0
+description: ""
+dependencies: []
+hooks: []
+properties: {}
 ```
+You can edit this file manually, but most settings can be managed using SHU commands (pdeps, pcommand, hooks, etc.).
+
+## 4. Reinitializing or Resetting
+If you want to reset SHU’s internal data without touching your source code:
 
 ```bash
-    shu get shu-misc #enable shu misc commands (needs 'source ./.shu/packages/shu-misc/shu-misc.sh' in your script)
-
-    shu get logger #recursivelly will get 'obj' package and 'shu-misc' package
+shu init --force
 ```
+⚠ Warning: This may overwrite your .shu/ folder and shu.yaml, so make backups if needed.
+
+# 📦 Managing Dependencies
+
+SHU includes a built-in package management system that lets you fetch, update, and remove project dependencies from Git repositories or archive files.
+
+## 1. Add a Dependency
+To fetch a dependency:
+
+```text
+shu get <source>[@<ref>][#<subdir>] [as <custom-name>]
+
+shu pdeps get <source>[@<ref>][#<subdir>] [as <custom-name>]
+```
+* \<source\> — URL to a Git repository or archive file
+
+* \@\<ref\> — Optional Git branch, tag, or commit (defaults to main)
+
+* \#\<subdir\> — Optional subdirectory to extract from the source
+
+* as \<custom-name\> — Custom name for the dependency folder (optional)
+
+Example:
+
+```text
+shu pdeps add https://github.com/rafael-tonello/SHU.git@main#/src/libs/shu-common
+```
+This installs the shu-common library into .shu/deps/.
+
+## 2. Restore Dependencies
+If you cloned a SHU project and need to fetch all declared dependencies:
 
 ```bash
-    #/!/bin/bash
-    source "$(dirname "${BASH_SOURCE[0]}")/.shu/packages/shu-misc/shu-misc.sh"
+shu pdeps restore
+```
+This reads the dependencies: section in shu.yaml and downloads everything.
 
-    shu.source logger
+
+## 3. Clean Dependencies
+To remove all installed dependencies without editing shu.yaml:
+
+```bash
+shu pdeps clean
+```
+💡 Tips:
+
+- Dependencies are stored in .shu/deps/ and isolated from your source code.
+- You can point dependencies to private Git repositories if your SSH keys are set up.
+- Using subdirectories in dependencies helps reduce bloat when fetching large repos.
+
+# Shu   CLI Help text
+```text
+Shu CLI version 0.1.0 - A package manager and project automation system.
+Usage:
+  shu <command> [options]
+
+Shu commands:
+  init [projectName] [options]
+                           - Initialize a new Shu project in the current directory.
+    options:
+      --template "<url[@<checkout_to>][#<path>][--allow-no-git]>" [options]
+                             - Use a previus shu project as a template to initialize the
+                                current folder. The template can be a git repository, a file
+                                URL (zip, 7z, tar.gz, tar.bz2) or a directory. Internaly, this
+                                will use 'shu pdeps get' command to get the template.'
+      options:
+        --not-recursive        - Do not restore dependencies of the package.
+      @<checkout_to>         - Shu will checkout the repository to <checkout_to>.
+      #<path>                - Shu will copy only the contents of the specified path (in the
+                                repository) to the package folder.
+      --allow-no-git         - allow a no git repository. Shu will try to find it in the
+                                filesystem or download it from the web. If a download could be
+                                done, the shu will try to extract it if has a supported
+                                extension (.zip, .tar.gz, .tar.bz2, .7z).
+  touch <scriptName>...    - Create a new .sh file with a basic structure.
+  get <urls>...            - Get one or more packages from Git URL and add it to the project.
+                              redirects to 'shu pdeps get <url>' (see int the 'pdeps'
+                              subcommand).
+  clean                    - Remove the .shu folder and all installed packages.
+  restore                  - Restore all dependencies from shu.yaml.
+  refresh                  - Clean and restore all dependencies from shu.yaml.
+  setmain <scriptName>     - Set a script as the main script for the project.
+  run [scriptName]         - Run the main script or a specific script.
+  install <url>            - Install a package from a URL to your system. Note that this
+                              command will install to be executed in your system, and not in
+                              your project. It is used to install projects written with SHU.
+                              Redirects to 'shu installer install'
+  uninstall <packageOrCommandName>
+                           - Uninstall a package or command from your sytem. Note that this
+                              command will not operate in your project, but in packages
+                              installed in your system via 'shu install'. Redirects to 'shu
+                              installer uninstall'
+  pcommand <subcommand>    - Commands to manage dependencies of the project
+    subcommands:
+      add <name> <command> <description>
+                             - Add a new command to the project. When you run 'shu <name>', the
+                                bash command <command> will be executed. All arguments will be
+                                passed to the command. When you run 'shu --help', the
+                                <discription> will be shown as description of the command.
+                                <name>, <command> and <description> are required parameters.
+      list [callback | options]
+                             - List all project commands.
+        callback <callback>    - If provided, the callback will be called with the command
+                                  name, action and description as arguments instead of printing
+                                  the commands to the console.
+        options:
+          --one-line           - Use only one line to each command.
+      remove <command>       - Removes the project the project command <command>.
+      run  <command> [args]  - Runs the command <command> and pass [args] to it. Is the same as
+                                running 'shu <command> [args]'.
+    runtool <scriptName>   - Find scripts named <scriptName> in ./shu/packages/ and run them.
+                              Internally, it uses 'find' (in a recusive way) to find the
+                              desired script and, if it be able to find that, runs it.
+  hooks <subcommand>        - Manage hooks for shu commands. Is focused in automating the
+                               project. A hooks runs commands before or after a shu command be
+                               executed (including those ones created for your project. See
+                               'shu pcommand --help' for more information).
+    subcommands:
+      add <when> <shu-command> <command>
+                               - Add a new hooks than executes <command> <when> <shu-command>.
+                                  <command> is a shu command without the 'shu' prefix. For
+                                  example, 'add before build' will add a hooks that executes
+                                  'build' command before the <shu-command> is executed.
+                                  <command> is a bash command. You can specify commands
+                                  directly or use a script file. If you want to use a script,
+                                  and want that this script have access to shu memory context,
+                                  you should use 'source <your script>' instead of '<your
+                                  script.sh>. The <when> can be 'after' or 'before' (more
+                                  information below).
+        when:                  - Sepcify when, relative to the shu command, the hooks should be
+                                  executed.
+          before                 - hooks should be executed before the <shu-command> be
+                                    executed. If return code is not 0, the <shu-command> will
+                                    not be executed.
+          after                  - hooks should be executed after the <shu-command> be
+                                    executed.
+        shu-command:           - The shu command that will trigger the hooks. It a command,
+                                  that shu is running, starts with this shu-command, the hooks
+                                  will be executed.
+        command:               - The command to be executed when the hooks is triggered. It can
+                                  be a bash command or a script file. If it is a script file,
+                                  you should use 'source <your script>' to have access to shu
+                                  memory context. Before a hooks be executed, shu export some
+                                  variables that can be used in you command/script:
+                                  1) SHU_HOOK_INDEX: the index of the hooks in the list of
+                                     hooks.
+                                  2) SHU_HOOK_WHEN: when the hooks is execute (before or after)
+                                     in relation to the shu command.
+                                  3) SHU_HOOK_COMMAND_TO_RUN: the hooks commnad (your code).
+                                  4) SHU_HOOK_COMMAND_TO_CHECK: the shu command that should be
+                                     evaluated.
+                                  5) SHU_HOOK_RECEIVED_COMMAND: the command that is being
+                                     executed (the command that shu is running).
+      list [callback]        - List all hooks in the project.
+        callback:             - If provided, the callback will be called for each hooks with
+                                 the following arguments: <index> <when> <shu-command>
+                                 <command>. If not provided, the hooks will be printed to the
+                                 console.
+      remove <index>         - Remove a hooks by its index from the list of hooks.
+  mainfile <subcommand>    - Commands to manage main scripts of the project
+    subcommands:
+      add <scriptNames>...     - Add scripts to the main section of shu.yaml.
+      remove <scriptNames>...
+                               - Remove scripts from the main section of shu.yaml.
+    list                     - List all scripts in the main section of shu.yaml.
+  tests [what] [options]    - Finds tests files and runs them. Tests files are files with the
+                               '.tests' sequence in its name. If you provide a file without
+                               '.tests', shu will try to find it by putting '.tests.' between
+                               filename and its extension. If nothing was provided (no
+                               arguments), shu will assume the current folder as directory.
+    what                     - You can specify a filename or a directory. Using a file name, it
+                                will runs only the specified tests file. Using a direcotry, it
+                                will run all tests files in the directory
+    options:
+     --recursive, -r           - If you provide a directory, shu will run tests in all
+                                  subdirectories recursively.
+  touch <fileName>         - Create a new script file with the given name. If no extension is
+                              provided, .sh will be added.
+  pdeps <subcommand>         - Commands to manage dependencies of the project
+    subcommands:
+      get "<url[@<checkout_to>][#<path>][as <name>][pack options]>"
+                             - Get a package from a URL and add it to the project. If you are
+                                hooking this command (after the execution), it exports
+                                SHU_LAST_DEP_GET_FOLDER with the path to the package folder.
+                                Attention: pack options should be passed inside "" among the
+                                dependency url.
+        @<checkout_to>         - Shu will checkout the repository to <checkout_to>.
+        #<path>                - Shu will copy only the contents of the specified path (in the
+                                  repository) to the package folder.
+        as <name>              - Shu will name package folder to <name> instead of the
+                                  repository name.
+        pack options:
+          --allow-no-git         - allow a no git repository. Shu will try to find it in the
+                                    filesystem or download it from the web. If a download could
+                                    be done, the shu will try to extract it if has a supported
+                                    extension (.zip, .tar.gz, .tar.bz2, .7z).
+          --not-recursive        - Do not restore dependencies of the package.
+          --git-recursive-clone  - Use git clone --recursive to clone the repository. If the
+                                    repository is not a git repository, it will be ignored.
+      restore                - Restore all dependencies from shu.yaml.
+      list [callback]        - List all dependencies in the project. If callback is provided,
+                                it will be called with the dependency as argument.
+        callback:              - If provided, the callback will be called for each dependency
+                                  with the dependency as argument. If not provided, the
+                                  dependencies will be printed to the console.
+      clean                  - Remove all dependencies from shu.yaml.
+    examples:
+      shu pdeps get 'https://github.com/rafael-tonello/SHU.git'
+                             - Get the SHU package from GitHub and add it to the project.
+      shu pdeps get 'https://github.com/rafael-tonello/SHU.git@develop --not-recursive'
+                             - Get the SHU package from GitHub, checkout to develop branch and
+                                do not restore dependencies.
+      shu pdeps get
+  'https://github.com/rafael-tonello/SHU.git@develop#/src/shellscript-fw/common
+                             - Get the SHU package from GitHub, checkout to develop branch,
+                                copy only the contents of src/shellscript-fw/common to the
+                                package folder.
+  build                    - Build a shellscript project. Compile the project in a single .sh
+                              file. This command is focused on shellscript projects, and you
+                              can override it through 'shu pcommand' subcommands. See 'shu
+                              pcommand --help' for more information.
+  pprops <subcommand>      - Manage project properties, data and key-value infomation. These
+                              properties are key-value pairs stored in the 'shu.yaml' file of
+                              the project, and allow you to store data and states for your
+                              project automation or whatever you want :D . They can be used to
+                              store configuration values, settings, or any other data related
+                              to the project. You can use object notation in 'keys', so you can
+                              store structured data.
+    subcommands:
+      set <key> <value>     - Set a property with the specified key and value. You can set
+                               multiple properties at once by providing multiple key-value
+                               pairs.
+      get <key>             - Get the value of a property by its key.
+      list [callback]       - List all properties of the project.
+        callback:             - If provided, the callback will be called for each property with
+                                 the key and value as arguments. If not provided, the
+                                 properties will be printed to the console.
+      remove <key>          - Remove a property by its key.
+      addarrayitem <arrayKey> <value> - Add an item to an array property.
+      listarrayitems <arrayKey>
+                            - List items of an array property.
+      removearrayitem <arrayKey> <index> - Remove an item from an array property by index.
+      addarrayobject <arrayKey> [key:value]... - Add an object to an array property with
+                                                  key-value pairs.
+      getobjectfromarray <arrayKey> <index> [callback] - Get an object from an array property
+                                                          by index and optionally call a
+                                                          callback with its key-value pairs.
+  psysdeps <subcommand>      - Informs system commands needed to project work correctly.
+    subcommands:
+      add <commandName> [information] [options]
+                             - Add a command to the sysdepss section of shu.yaml.
+        options:
+          --force, -f          - force to command to be added. It will override the existing
+                                  (will update) command.
+          --check-command, -c  - changes the way that shu check for dependency. Default way if
+                                  using 'command -v <commandName>'
+      remove <commandName>   - Remove a command from the sysdepss section of shu.yaml.
+      list [callback | options]
+                             - List all commands in the sysdepss section of shu.yaml.
+        callback:              - If provided, the callback will be called for each command with
+                                  the command name, description and check command as
+                                  arguments.
+        options:
+          --level, -l <level>  - specify the level of dependencies to scan. default is 0 (no
+                                  limits)
+                                 examples:
+                                   0 - all dependencies of all packages and the current
+                                      project;
+                                   1 - only the current project;
+                                   2 - current project and its dependencies;
+                                   3 - current project and its dependencies and their
+                                      dependencies, etc;
+                                   N - current project and its dependencies and their
+                                      dependencies and so on, up to N levels;
+          --onlynames, -on     - only show the names of the dependencies
+      check [options]        - Check if the commands in the sysdepss section of shu.yaml are
+                                available in the system.
+        options:
+          --level, -l <level>  - specify the level of dependencies
 
 
-    logger.New; logmanager="$_r"
-    o.Call '$logmanager.GetNLog' 'main'; log="$_r"
+Additional information about Shu:
+  - Shu initially was focused on shellscripting, but it was changed over the time and, now, shu
+     can work with (almost) any kind of software project, managing packages from git
+     repositories and automating the project with commands, hooks and more.
+  - If you are hooking a command or writing commands for you project, shu exports some
+     variables:
+    - SHU_PROJECT_ROOT_DIR: The root directory of the project. It is the directory where the
+       shu.yaml file is located.
+    - SHU_PROJECT_WORK_DIR: The current working directory of the project
+    - SHU_LAST_DEP_GET_FOLDER: The folder where the last dependency was downloaded. It is only
+       available after the 'shu pdeps get' be execute and is designed to be used in hooks.
+    - SHU_HOOK_INDEX: When running hooks, contains the index of the hook (in the 'shu.xml'
+       hooks list).
+    - SHU_HOOK_WHEN: When running hooks, contains the moment when the hook is being executed
+       (related to the command being executed). Possible values are 'before' and 'after'.
+    - SHU_HOOK_COMMAND_TO_RUN: When running hooks, contains the hooks commnad (your code).
+    - SHU_HOOK_COMMAND_TO_CHECK: When running hooks, contains the shu command that should be
+       evaluated.
+    - SHU_HOOK_RECEIVED_COMMAND: When running hooks, contains the command that is being
+       executed (the command that shu is running).
+    - SHU_BINARY: The path to the shu binary that is being executed. Useful when using shu
+       embedded in a project.
+rafinha_tonello@vmware-ubuntu22:~$ 
 
-    o.Call '$log.info' 'info message'
 
 ```
-[x] Run shu psysdeps check after get a package or restoring project
-[x] Rename shu commands to plural (like mainfiles)
-[x] Do not show heades in command outputs (like in lists).. the comand itself is the header and it allow a easy use of these commands within subshells
