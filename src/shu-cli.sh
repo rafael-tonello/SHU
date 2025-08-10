@@ -68,6 +68,15 @@ shu.Main(){ local cmd="$1";
 
             source "$shuHooksFile" "run" "before" "$cmd" "$@"; local retCode=$?; local err="$_error"
 
+            #call main.sh command redirections
+            if [[ "$cmd$@" == "pdeps get"* ]]; then
+                source "$shuHooksFile" "run" "before" "get" "$@"; local retCode=$?; local err="$_error"
+            elif [[ "$cmd$@" == "installer install"* ]]; then
+                source "$shuHooksFile" "run" "before" "install" "$@"; local retCode=$?; local err="$_error"
+            elif [[ "$cmd$@" == "installer uninstall"* ]]; then
+                source "$shuHooksFile" "run" "before" "uninstall" "$@"; local retCode=$?; local err="$_error"
+            fi
+
             #if file changes the current directory, and change SHU_PROJECT* variables (by calling shu.Main), restore them
             cd "$currDir"
             shu.detectEnvAndGoRoot
@@ -149,6 +158,16 @@ shu.Main(){ local cmd="$1";
         local shuHooksFile="$shu_scriptDir/commands/hooks.sh"
         if [ -f "$shuHooksFile" ]; then
             source "$shuHooksFile" "run" "after" "$cmd" "$@"; local retCode=$?; local err="$_error"
+
+            #call main.sh command redirections
+            if [[ "$cmd$@" == "pdeps get"* ]]; then
+                source "$shuHooksFile" "run" "after" "get" "$@"; local retCode=$?; local err="$_error"
+            elif [[ "$cmd$@" == "installer install"* ]]; then
+                source "$shuHooksFile" "run" "after" "install" "$@"; local retCode=$?; local err="$_error"
+            elif [[ "$cmd$@" == "installer uninstall"* ]]; then
+                source "$shuHooksFile" "run" "after" "uninstall" "$@"; local retCode=$?; local err="$_error"
+            fi
+
             #if file changes the current directory, and change SHU_PROJECT* variables (by calling shu.Main), restore them
             cd "$currDir"
             shu.detectEnvAndGoRoot
