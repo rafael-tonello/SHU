@@ -1017,7 +1017,6 @@ misc.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
         local error="$1"
         local _currIdentation="$2"
         local _currPrefix_="${3:-}"
-
         
         local currError=""
 

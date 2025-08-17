@@ -26,13 +26,20 @@ source "$shu_scriptDir/shellscript-fw/common/misc.sh"
 #}
 
 shu.detectEnvAndGoRoot(){
-    export SHU_PROJECT_WORK_DIR="$(pwd)"
-    shu.getShuProjectRootDir; local retCode=$?; export SHU_PROJECT_ROOT_DIR="$_r"
-    if [ $retCode -eq 0 ]; then
-        cd "$SHU_PROJECT_ROOT_DIR"
-        shu.yaml.get "shu.yaml" ".name"; export SHU_PROJECT_NAME="$_r"
-    else
-        export SHU_PROJECT_ROOT_DIR=""
+    #needs to check if SHU_PROJECT_WORK_DIR and SHU_PROJECT_ROOT_DIR are setted becuase shu.Main may be called many times (in a recusion like way)
+    if [ "$SHU_PROJECT_WORK_DIR" == "" ]; then
+        export SHU_PROJECT_WORK_DIR="$(pwd)"
+    fi
+
+    if [ "$SHU_PROJECT_ROOT_DIR" == "" ]; then
+        
+        shu.getShuProjectRootDir; local retCode=$?; export SHU_PROJECT_ROOT_DIR="$_r"
+        if [ $retCode -eq 0 ]; then
+            cd "$SHU_PROJECT_ROOT_DIR"
+            shu.yaml.get "shu.yaml" ".name"; export SHU_PROJECT_NAME="$_r"
+        else
+            export SHU_PROJECT_ROOT_DIR=""
+        fi
     fi
 }
 
