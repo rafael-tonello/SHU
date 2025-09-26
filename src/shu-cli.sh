@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SHU_VERSION="0.1.0"
+SHU_VERSION="0.1.1"
 shu_scriptFullPath="$(realpath "$0")"
 shu_scriptDir="$(dirname "$shu_scriptFullPath")"
 export SHU_PROJECT_WORK_DIR="" #setted by shu.Main
@@ -395,6 +395,15 @@ shu.Main(){ local cmd="$1";
             return $?
         fi
 
+        #check if folder is not empty
+        if [ "$(ls -A .)" ]; then
+            misc.PrintYellow "Warning: The current folder is not empty. Shu will create the folder '$projectName' and initialize the project inside it. You should enter in the folder '$projectName' to work with the project.\n"
+
+            mkdir -p "$projectName"
+            cd "$projectName"
+        fi
+
+
         shu.initFolder "$projectName"
 
         #check for --template option
@@ -456,7 +465,7 @@ shu.Main(){ local cmd="$1";
     shu.Refresh(){
         shu.Main clean
         shu.Main restore
-    }
+    }; shu.Reload(){ shu.Refresh "@"; } #alias for shu.Refresh
 
     shu.Help(){
         local onlyProject=false

@@ -143,7 +143,7 @@ shu.psysdeps.Check(){
         done
         
     else
-        echo "All commands are available."
+        echo "All system dependencies are available."
     fi
         echo ""
 }

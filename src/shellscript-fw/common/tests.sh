@@ -423,4 +423,3 @@ Tests.DirNotExists(){
         Tests.EndTest false "Directory found when it should not: '$dirPath'"
     fi
 }
-
