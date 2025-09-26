@@ -477,6 +477,26 @@ SHU_MISC_LOADED=true
             return 1
         fi
 
+        #call Destory method, if present
+        o.HasMethod "$obj" "Destroy"; local hasDestroyMethod="$_r"
+        if $hasDestroyMethod; then
+            o.Call "$obj" "Destroy" "$_destroyChildren"
+            if [ "$_error" != "" ]; then
+                _error="Could not call Destroy method of object '$obj': $_error"
+                return 1
+            fi
+        fi
+
+        #call OnDestory method, if present
+        o.HasMethod "$obj" "OnDestroy"; local hasDestroyMethod="$_r"
+        if $hasDestroyMethod; then
+            o.Call "$obj" "OnDestroy" "$_destroyChildren"
+            if [ "$_error" != "" ]; then
+                _error="Could not call Destroy method of object '$obj': $_error"
+                return 1
+            fi
+        fi
+
         o.ListProps "$obj"; local props=("${_r[@]}")
         for prop in "${props[@]}"; do
             #if the property is an object, destroy it
@@ -692,6 +712,17 @@ SHU_MISC_LOADED=true
         _error=""
         return 0
     }
+
+    o.Clone(){ local obj="$1"; 
+        o.New; local newObj="$_r"
+        for var in $(compgen -v | grep "^$obj"); do
+            declare -n varRef="$var"
+            local value="$varRef"
+
+            declare -n newVarName="${var//$obj/$newObj}"
+            newVarName="$value"
+        done
+    }; o.Copy(){ o.Clone "$@"; }
 
     #ONKey comes from ObjectNotationKey
     o._deserializeProp(){ local obj="$1"; local ONKey="$2"; local value="$3";
