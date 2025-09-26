@@ -223,16 +223,16 @@ shu.Hooks.Run(){ local rwhen="$1"; shift; local rcommandToCheck="$@"
             fi
 
 
-            #__f() {
+            #__f2() {
             #    local line="$1"
             #    echo "  $line"
             #}
-            #shu.RunCommandAndInterceptStdout "$_hookCommand" "__f"
+            #shu.RunCommandAndInterceptStdout "$_hookCommand" "__f2"
             #__retCode=$?
 
-            shu.RunCommandAndInterceptStdout "$_hookCommand" '__f(){
+            shu.RunCommandAndInterceptStdout "$_hookCommand" '__f2(){
                 echo "  $1"
-            }; __f'
+            }; __f2'
             local __retCode=$?
             
             if [[ $__retCode -ne 0 ]]; then #  ||  "$_error" != "" ]]; then
