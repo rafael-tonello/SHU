@@ -44,6 +44,8 @@ shu.detectEnvAndGoRoot(){
 }
 
 shu.Main(){ local cmd="$1";
+    local retCode=0
+    local runned=false
     shu.detectEnvAndGoRoot
     local currDir="$SHU_PROJECT_ROOT_DIR" #if a command file calls main, the SHU_PROJECT_* variables could be changed. So, we need to restore the pwd and these variables after run command file
 
@@ -72,7 +74,6 @@ shu.Main(){ local cmd="$1";
     if [ "$SHU_PROJECT_ROOT_DIR" != "" ]; then
         local shuHooksFile="$shu_scriptDir/commands/hooks.sh"
         if [ -f "$shuHooksFile" ]; then
-
             source "$shuHooksFile" "run" "before" "$cmd" "$@"; local retCode=$?; local err="$_error"
 
             #call main.sh command redirections
@@ -109,49 +110,51 @@ shu.Main(){ local cmd="$1";
             misc.PrintError "Shu error:  Error running project command \"$cmd\": pcommands.sh not found in the commands folder."; _error=""
         fi
 
-        source "$shu_scriptDir/commands/pcommands.sh" "run" "$cmd" "$@"; local retCode=$?
+        source "$shu_scriptDir/commands/pcommands.sh" "run" "$cmd" "$@"; retCode=$?
         cd "$SHU_PROJECT_WORK_DIR"
         if [ "$retCode" -ne 0 ]; then
             misc.PrintError "Shu error: Error running project command \"$cmd\": $_error"; _error=""
             return 1
         fi
-        return $retCode
+
+        runned=true
     fi
     _error=""
 
-    local retCode=0
-
-    #check if lowercase of capitalizedCmd contains 'Run' or 'run' (do not supress stderr when running scripts using shu)
-    if [[ "$capitalizedCmd" == *"Run"* ]]; then
-        shu.Run "$@"
-        retCode=$?
-    elif type "shu.$capitalizedCmd" &> /dev/null; then
-        shu.$capitalizedCmd "$@"
-        retCode=$?
-
-        if [ "$_error" != "" ]; then
-            misc.PrintError "Shu error: $_error"; _error=""
-        fi
-        return $retCode
-    else
-        #check if the folder $shu_scriptFullPath/.shu/packages/common/commands/$cmd.sh exists 
-        local commandFile="$shu_scriptDir/commands/$cmd.sh"
-        if [ -f "$commandFile" ]; then
-            #run the command file
-            source "$commandFile"
+    
+    if ! $runned; then
+        #check if lowercase of capitalizedCmd contains 'Run' or 'run' (do not supress stderr when running scripts using shu)
+        if [[ "$capitalizedCmd" == *"Run"* ]]; then
+            shu.Run "$@"
             retCode=$?
-            if [ "$retCode" -ne 0 ] || [ "$_error" != "" ]; then
-                
-                misc.PrintError "Shu error: Error running command '$cmd': $_error";
-                _error=""
-                rm -f /tmp/shu_error.log
+        elif type "shu.$capitalizedCmd" &> /dev/null; then
+            shu.$capitalizedCmd "$@"
+            retCode=$?
+
+            if [ "$_error" != "" ]; then
+                misc.PrintError "Shu error: $_error"; _error=""
                 return 1
             fi
-            rm -f /tmp/shu_error.log
-            cd "$SHU_PROJECT_WORK_DIR"
         else
-            misc.PrintError "Command '$cmd' not found in your project, nor in the SHU commands. User 'shu pcommand --help' to see the available project commands, or 'shu --help' to see the available SHU commands."; _error=""
-            retCode=1
+            #check if the folder $shu_scriptFullPath/.shu/packages/common/commands/$cmd.sh exists 
+            local commandFile="$shu_scriptDir/commands/$cmd.sh"
+            if [ -f "$commandFile" ]; then
+                #run the command file
+                source "$commandFile"
+                retCode=$?
+                if [ "$retCode" -ne 0 ] || [ "$_error" != "" ]; then
+                    
+                    misc.PrintError "Shu error: Error running command '$cmd': $_error";
+                    _error=""
+                    rm -f /tmp/shu_error.log
+                    return 1
+                fi
+                rm -f /tmp/shu_error.log
+                cd "$SHU_PROJECT_WORK_DIR"
+            else
+                misc.PrintError "Command '$cmd' not found in your project, nor in the SHU commands. User 'shu pcommand --help' to see the available project commands, or 'shu --help' to see the available SHU commands."; _error=""
+                return 1
+            fi
         fi
     fi
 
@@ -192,7 +195,7 @@ shu.Main(){ local cmd="$1";
     _error=""
     
     cd "$SHU_PROJECT_WORK_DIR"
-    return 0
+    return $retCode
 }
 
 #utils functions {
