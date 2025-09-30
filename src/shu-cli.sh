@@ -33,8 +33,8 @@ shu.detectEnvAndGoRoot(){
 
     if [ "$SHU_PROJECT_ROOT_DIR" == "" ]; then
         
-        shu.getShuProjectRootDir; local retCode=$?; export SHU_PROJECT_ROOT_DIR="$_r"
-        if [ $retCode -eq 0 ]; then
+        shu.getShuProjectRootDir; local shuMainRetcode=$?; export SHU_PROJECT_ROOT_DIR="$_r"
+        if [ $shuMainRetcode -eq 0 ]; then
             cd "$SHU_PROJECT_ROOT_DIR"
             shu.yaml.get "shu.yaml" ".name"; export SHU_PROJECT_NAME="$_r"
         else
@@ -44,7 +44,7 @@ shu.detectEnvAndGoRoot(){
 }
 
 shu.Main(){ local cmd="$1";
-    local retCode=0
+    local shuMainRetcode=0
     local runned=false
     shu.detectEnvAndGoRoot
     local currDir="$SHU_PROJECT_ROOT_DIR" #if a command file calls main, the SHU_PROJECT_* variables could be changed. So, we need to restore the pwd and these variables after run command file
@@ -74,15 +74,15 @@ shu.Main(){ local cmd="$1";
     if [ "$SHU_PROJECT_ROOT_DIR" != "" ]; then
         local shuHooksFile="$shu_scriptDir/commands/hooks.sh"
         if [ -f "$shuHooksFile" ]; then
-            source "$shuHooksFile" "run" "before" "$cmd" "$@"; local retCode=$?; local err="$_error"
+            source "$shuHooksFile" "run" "before" "$cmd" "$@"; local shuMainRetcode=$?; local err="$_error"
 
             #call main.sh command redirections
             if [[ "$cmd$@" == "pdeps get"* ]]; then
-                source "$shuHooksFile" "run" "before" "get" "$@"; local retCode=$?; local err="$_error"
+                source "$shuHooksFile" "run" "before" "get" "$@"; local shuMainRetcode=$?; local err="$_error"
             elif [[ "$cmd$@" == "installer install"* ]]; then
-                source "$shuHooksFile" "run" "before" "install" "$@"; local retCode=$?; local err="$_error"
+                source "$shuHooksFile" "run" "before" "install" "$@"; local shuMainRetcode=$?; local err="$_error"
             elif [[ "$cmd$@" == "installer uninstall"* ]]; then
-                source "$shuHooksFile" "run" "before" "uninstall" "$@"; local retCode=$?; local err="$_error"
+                source "$shuHooksFile" "run" "before" "uninstall" "$@"; local shuMainRetcode=$?; local err="$_error"
             fi
 
             #if file changes the current directory, and change SHU_PROJECT* variables (by calling shu.Main), restore them
@@ -93,7 +93,7 @@ shu.Main(){ local cmd="$1";
             if [[ -n "$_error" && $_error != *"$ERROR_NO_HOOKS_FOUND"* ]]; then
                 misc.PrintError "Shu error running hooks before command: $_error"; _error=""
                 cd "$SHU_PROJECT_WORK_DIR"
-                return $retCode
+                return $shuMainRetcode
             fi
         else
             misc.PrintYellow "Warning: shu hooks module is missing. File '$shu_scriptDir/commands/hooks.sh' not found. Hooks will not be executed.\n" >/dev/stderr
@@ -110,9 +110,9 @@ shu.Main(){ local cmd="$1";
             misc.PrintError "Shu error:  Error running project command \"$cmd\": pcommands.sh not found in the commands folder."; _error=""
         fi
 
-        source "$shu_scriptDir/commands/pcommands.sh" "run" "$cmd" "$@"; retCode=$?
+        source "$shu_scriptDir/commands/pcommands.sh" "run" "$cmd" "$@"; shuMainRetcode=$?
         cd "$SHU_PROJECT_WORK_DIR"
-        if [ "$retCode" -ne 0 ]; then
+        if [ "$shuMainRetcode" -ne 0 ]; then
             misc.PrintError "Shu error: Error running project command \"$cmd\": $_error"; _error=""
             return 1
         fi
@@ -126,10 +126,10 @@ shu.Main(){ local cmd="$1";
         #check if lowercase of capitalizedCmd contains 'Run' or 'run' (do not supress stderr when running scripts using shu)
         if [[ "$capitalizedCmd" == *"Run"* ]]; then
             shu.Run "$@"
-            retCode=$?
+            shuMainRetcode=$?
         elif type "shu.$capitalizedCmd" &> /dev/null; then
             shu.$capitalizedCmd "$@"
-            retCode=$?
+            shuMainRetcode=$?
 
             if [ "$_error" != "" ]; then
                 misc.PrintError "Shu error: $_error"; _error=""
@@ -141,8 +141,8 @@ shu.Main(){ local cmd="$1";
             if [ -f "$commandFile" ]; then
                 #run the command file
                 source "$commandFile"
-                retCode=$?
-                if [ "$retCode" -ne 0 ] || [ "$_error" != "" ]; then
+                shuMainRetcode=$?
+                if [ "$shuMainRetcode" -ne 0 ] || [ "$_error" != "" ]; then
                     
                     misc.PrintError "Shu error: Error running command '$cmd': $_error";
                     _error=""
@@ -167,15 +167,15 @@ shu.Main(){ local cmd="$1";
         #check if hooks.sh file is available 
         local shuHooksFile="$shu_scriptDir/commands/hooks.sh"
         if [ -f "$shuHooksFile" ]; then
-            source "$shuHooksFile" "run" "after" "$cmd" "$@"; local retCode=$?; local err="$_error"
+            source "$shuHooksFile" "run" "after" "$cmd" "$@"; local retCode2=$?; local err="$_error"
 
             #call main.sh command redirections
             if [[ "$cmd$@" == "pdeps get"* ]]; then
-                source "$shuHooksFile" "run" "after" "get" "$@"; local retCode=$?; local err="$_error"
+                source "$shuHooksFile" "run" "after" "get" "$@"; local retCode2=$?; local err="$_error"
             elif [[ "$cmd$@" == "installer install"* ]]; then
-                source "$shuHooksFile" "run" "after" "install" "$@"; local retCode=$?; local err="$_error"
+                source "$shuHooksFile" "run" "after" "install" "$@"; local retCode2=$?; local err="$_error"
             elif [[ "$cmd$@" == "installer uninstall"* ]]; then
-                source "$shuHooksFile" "run" "after" "uninstall" "$@"; local retCode=$?; local err="$_error"
+                source "$shuHooksFile" "run" "after" "uninstall" "$@"; local retCode2=$?; local err="$_error"
             fi
 
             #if file changes the current directory, and change SHU_PROJECT* variables (by calling shu.Main), restore them
@@ -186,7 +186,7 @@ shu.Main(){ local cmd="$1";
             if [[ -n "$_error" && $_error != *"$ERROR_NO_HOOKS_FOUND"* ]]; then
                 misc.PrintError "Shu error running hooks after commnad: $_error"; _error=""
                 cd "$SHU_PROJECT_WORK_DIR"
-                return $retCode
+                return $retCode2
             fi
         else
             misc.PrintYellow "Warning: shu hooks module is missing. File '$shu_scriptDir/commands/hooks.sh' not found. Hooks will not be executed.\n" >&2
@@ -195,12 +195,13 @@ shu.Main(){ local cmd="$1";
     _error=""
     
     cd "$SHU_PROJECT_WORK_DIR"
-    return $retCode
+
+    return $shuMainRetcode
 }
 
 #utils functions {
     shu.checkPrerequisites(){
-        local retCode=0
+        local shuMainRetcode=0
         _error=""
 
         #check if yq is installed
@@ -214,19 +215,19 @@ shu.Main(){ local cmd="$1";
         if ! command -v git &> /dev/null; then
             if [ "$_error" != "" ]; then _error+="+ "; fi
             _error+="git is not installed. Shu needs git to install project dependencies."
-            retCode=1
+            shuMainRetcode=1
         fi
 
         if ! command -v split &> /dev/null; then
             if [ "$_error" != "" ]; then _error+="+ "; fi
             _error+="split is not installed. Shu uses shu."
-            retCode=1
+            shuMainRetcode=1
         fi
 
         if ! command -v curl &> /dev/null; then
             if [ "$_error" != "" ]; then _error+="+ "; fi
             _error+="Curl is not installed. Please install Curl to use Shu."
-            retCode=1
+            shuMainRetcode=1
         fi
 
         ##check if jq is installed
@@ -235,7 +236,7 @@ shu.Main(){ local cmd="$1";
         #    return 1
         #fi
 
-        return $retCode
+        return $shuMainRetcode
     }
 
     shu.getShuProjectRootDir(){
@@ -334,7 +335,7 @@ shu.Main(){ local cmd="$1";
         (
             set -o pipefail
 
-            eval "$command; retCode=\$?; echo \$retCode > $tempFolder/retCode" \
+            eval "$command; shuMainRetcode=\$?; echo \$shuMainRetcode > $tempFolder/shuMainRetcode" \
                 2> >(while IFS= read -r line; do echo "stderr:$line"; done) \
                 | while IFS= read -r line; do 
                     if [[ "$line" == stderr:* ]]; then
@@ -349,7 +350,7 @@ shu.Main(){ local cmd="$1";
         ) >> "$fifo" &
 
         local pid=$!
-        local retCode=""
+        local shuMainRetcode=""
         while IFS= read -r line; do
             if [[ "$line" == end:* ]]; then
                 break
@@ -370,10 +371,10 @@ shu.Main(){ local cmd="$1";
 
         rm -f "$fifo"
 
-        local retCode=0        
-        if [[ -f "$tempFolder/retCode" ]]; then
-            retCode=$(cat "$tempFolder/retCode")
-            rm -f "$tempFolder/retCode"
+        local shuMainRetcode=0        
+        if [[ -f "$tempFolder/shuMainRetcode" ]]; then
+            shuMainRetcode=$(cat "$tempFolder/shuMainRetcode")
+            rm -f "$tempFolder/shuMainRetcode"
         fi
         
         if [ -f "$tempFolder/stderr.log" ]; then
@@ -383,7 +384,7 @@ shu.Main(){ local cmd="$1";
         fi
         _r=$(cat "$tempFolder/stdout.log")
         rm -rf "$tempFolder"
-        return $retCode
+        return $shuMainRetcode
     }
 
 #}
@@ -1169,8 +1170,8 @@ if [[ "$1" == "--debug-read-from-file" ]]; then
     secondLine=$(head -n 2 "$2" | tail -n 1)
     cd "$firstLine"
     
-    eval "shu.Main $secondLine"; retCode=$?
-    exit $retCode
+    eval "shu.Main $secondLine"; shuMainRetcode=$?
+    exit $shuMainRetcode
 fi
 
 shu.Main "$@"; retCode=$?
