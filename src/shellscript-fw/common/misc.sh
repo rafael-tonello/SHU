@@ -648,14 +648,14 @@ SHU_MISC_LOADED=true
         fi
         
         #keys can have Object Notation, like 'obj.key' or 'obj.other.key'
-        serializer.List; local keys=("${_r[@]}")
+        o.Call "$serializer.List"; local keys=("${_r[@]}")
         if [ ! -z "$_error" ]; then
             _error="Could not list keys of serializer '$serializer': $_error"
             return 1
         fi
 
         for okey in "${keys[@]}"; do
-            serializer.Get "$okey"; local value="$_r"
+            o.Call "$serializer.Get" "$okey"; local value="$_r"
             if [ ! -z "$_error" ]; then
                 _error="Could not get value of key '$okey' from serializer '$serializer': $_error"
                 return 1
