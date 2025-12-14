@@ -642,7 +642,11 @@ SHU_MISC_LOADED=true
     }
     o.ToString(){ o.Serialize "$@"; }
 
-    o.Deserialize(){ local obj="$1"; local serializer="$2"; local _parent="${3:-}"
+    o.Deserialize(){ local obj="$1"; local serializer="$2"; local _data="${3:-}"
+        if [ "$_data" != "" ]; then
+            o.Call "$serializer.Deserialize" "$_data"
+        fi
+        
         #keys can have Object Notation, like 'obj.key' or 'obj.other.key'
         serializer.List; local keys=("${_r[@]}")
         if [ ! -z "$_error" ]; then
@@ -1213,4 +1217,23 @@ shu.RunCommandAndInterceptStdout() {
     _r=$(cat "$tempFolder/stdout.log")
     rm -rf "$tempFolder"
     return $retCode
+}
+
+#hook functions (written in shellscript)
+#original func ($funcName) will be renamed to another name. When it be called, $hookFunc will be called and
+#the name of the original funcion will be passed as first parameters.
+misc_hookIdCounter=0
+misc.HookFunction(){ local funcName="$1"; local hookFunc="$2"; shift 2
+    local newFuncName="${funcName}_original_${misc_hookIdCounter}"
+    misc_hookIdCounter=$((misc_hookIdCounter + 1))
+
+    #code of original function
+    originalCode="$(declare -f "$funcName")"
+
+    #replace the name of the original function
+    originalCode="${originalCode/$funcName/$newFuncName}"
+
+    eval "$originalCode"
+
+    eval "$funcName() { $hookFunc \"$newFuncName\" \"\$@\"; }"
 }
