@@ -642,7 +642,12 @@ SHU_MISC_LOADED=true
     }
     o.ToString(){ o.Serialize "$@"; }
 
+    #if you pass "obj" as "", a new one will be created
     o.Deserialize(){ local obj="$1"; local serializer="$2"; local _data="${3:-}"
+        if [ "$obj" == "" ]; then
+            o.New; local obj="$_r"
+        fi
+
         if [ "$_data" != "" ]; then
             o.Call "$serializer.Deserialize" "$_data"
         fi
@@ -667,6 +672,8 @@ SHU_MISC_LOADED=true
                 return 1
             fi
         done
+
+        _r="$obj"
 
         return 0
     }
