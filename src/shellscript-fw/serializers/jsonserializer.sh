@@ -66,6 +66,13 @@ JsonSerializer.Serialize(){ local ser="$1"
 }
 
 JsonSerializer.Deserialize(){ local ser="$1"; local data="$2"; parentName="${3:-}"
+    #clear current serializer
+    o.Set "$ser.count" 0
+
+    JsonSerializer._ideserialize "$ser" "$data" "$parentName"
+}
+
+JsonSerializer._ideserialize(){ local ser="$1"; local data="$2"; local parentName="$3"
     if [ "$parentName" != "" ]; then
         parentName="$parentName."
     fi
@@ -76,8 +83,6 @@ JsonSerializer.Deserialize(){ local ser="$1"; local data="$2"; parentName="${3:-
         return 1
     fi
 
-    #clear current serializer
-    o.Set "$ser.count" 0
 
     #iterate over the kkeys and values in the JSON object
     for kkey in $(echo "$data" | jq -r 'keys[]'); do
@@ -86,7 +91,7 @@ JsonSerializer.Deserialize(){ local ser="$1"; local data="$2"; parentName="${3:-
         
         #check if value is a json object
         if echo "$value" | jq empty &> /dev/null && [[ $(echo "$value" | jq 'type') == "\"object\"" ]]; then
-            JsonSerializer.Deserialize "$ser" "$value" "$parentName$kkey"
+            JsonSerializer._ideserialize "$ser" "$value" "$parentName$kkey"
         else
             JsonSerializer.Set "$ser" "$parentName$kkey" "$value"
         fi
