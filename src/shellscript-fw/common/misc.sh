@@ -365,6 +365,7 @@ SHU_MISC_LOADED=true
     }
 
     o._get(){ local obj="$1"; local okey="$2"
+        _error=""
         if [ -z "$obj" ] || [ -z "$okey" ]; then
             _error="Object or key was not informed"
             return 1
@@ -1126,7 +1127,7 @@ misc.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
 #   # will set the properties 'file' of the object '$obj' (inside func 'myFunc') to the values 'value1', 'value2' and 'value3', respectively.
 #
 #       o.New; local obj="$_r";}
-misc.parseOptions(){
+misc.ParseOptions(){
     local obj="$1"; shift
     while true; do
         local arg="${!i}"; ((i++))
@@ -1154,8 +1155,7 @@ misc.parseOptions(){
             #replace '-' by '_' in key
             key="${key//-/_}"
 
-            o.Get "$obj" "$key"; local existingValue="${_r[@]}"
-            o.Set "$obj" "$key" "${existingValue[@]}" "$value"
+            o.Set "$obj" "$key" "$value"
         fi
     done
 }
