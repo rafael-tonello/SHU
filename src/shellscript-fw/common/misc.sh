@@ -230,13 +230,33 @@ SHU_MISC_LOADED=true
 #basic object/stuct operations (allow basic OO oiperations in bash){
 
     __o_count=0
+
+    __o_SubshellRW=false
+    __o_SubShellRWId=0
+
+    #enable subshell read/write mode make subshells able to also write to the objects created in the parent shell and it is a powerfull way to enable a back-and-forth communication between subshells and the parent shell. It is reached by storing the object data in temporary files in the /dev/shm filesystem, which is a tmpfs (temporary file storage in memory) in Linux systems.
+    o.EnableSubshellRW(){ 
+        __o_SubshellRW=true;
+        #processid + random 
+        __o_SubShellRWId="$$_$RANDOM"
+        mkdir -p "/dev/shm/shu_subshell_rw/$__o_SubShellRWId"
+    }
+    o.DisableSubshellRW(){ __o_SubshellRW=false; }
+
     o.New(){ local _className="$1"
         _error=""
-        _r="obj_$((__o_count++))_"
-        eval "$_r=obj"
+        local tmp="obj_$((__o_count++))_"
+        eval "$tmp=obj"
         if [ ! -z "$_className" ]; then
-            o.Set "$_r" "ClassName" "$_className"
+            o.Set "$tmp" "ClassName" "$_className"
         fi
+
+        if $__o_SubshellRW; then
+            local fname="/dev/shm/shu_subshell_rw/$__o_SubShellRWId/$tmp"
+            echo "$tmp" > "$fname"
+        fi
+
+        _r="$tmp"
     }
 
 
@@ -345,6 +365,15 @@ SHU_MISC_LOADED=true
             return 1
         fi
 
+        if $__o_SubshellRW; then
+            local fname="/dev/shm/shu_subshell_rw/$__o_SubShellRWId/$obj""_""$okey"
+            rm -f "$fname" 2>/dev/null
+            for arg in "$@"; do
+                echo "$arg" >> "$fname"
+            done
+            return 0
+        fi
+
         declare -n var="$obj""_""$okey"
 
         #if there more than one argument
@@ -371,7 +400,29 @@ SHU_MISC_LOADED=true
             return 1
         fi
 
+        if $__o_SubshellRW; then
+            local fname="/dev/shm/shu_subshell_rw/$__o_SubShellRWId/$obj""_""$okey"
+            if [ ! -f "$fname" ]; then
+                _r=""
+                return 1
+            fi
+
+            mapfile -t lines < "$fname"
+            if [ "${#lines[@]}" -gt 1 ]; then
+                _r=("${lines[@]}")
+            else
+                _r="${lines[0]}"
+            fi
+
+            return 0
+        fi
+
         declare -n var="$obj""_""$okey"
+
+        if [ ! -n "$var" ]; then
+            _r=""
+            return 1
+        fi
 
         #check if array size if greater than 1
         #if [ "${#var[@]}" -gt 1 ]; then
@@ -389,6 +440,17 @@ SHU_MISC_LOADED=true
         if [ ! -z "$_error" ]; then
             _error="Could not get final object name: $_error"
             return 1
+        fi
+
+        if $__o_SubshellRW; then
+            local fname="/dev/shm/shu_subshell_rw/$__o_SubShellRWId/$obj""_""$okey"
+            if [ -f "$fname" ]; then
+                _r=true
+                return 0
+            else
+                _r=false
+                return 1
+            fi
         fi
 
         declare -n var="$obj""_""$okey"
@@ -438,6 +500,13 @@ SHU_MISC_LOADED=true
             return 1
         fi
 
+        if $__o_SubshellRW; then
+            local fname="/dev/shm/shu_subshell_rw/$__o_SubShellRWId/$obj""_""$okey"
+            rm -f "$fname" 2>/dev/null
+            _r=true
+            return 0
+        fi
+
         declare -n var="$obj""_""$okey"
         unset var
         _r=true
@@ -457,6 +526,22 @@ SHU_MISC_LOADED=true
         fi
 
         _r=()
+
+        if $__o_SubshellRW; then
+            local path="/dev/shm/shu_subshell_rw/$__o_SubShellRWId/"
+            for file in "$path"*; do
+                #get the filename without the path
+                local filename="$(basename "$file")"
+                #check if filename starts with obj_
+                if [[ "$filename" == "$obj""_"* ]]; then
+                    #remove the object name from the filename
+                    local prop="${filename#"$obj""_"}"
+                    _r+=("$prop")
+                fi
+            done
+
+            return 0
+        fi
         
         #get all variables that start with the object name
         for var in $(compgen -v | grep "^$obj"); do
@@ -498,6 +583,26 @@ SHU_MISC_LOADED=true
             fi
         fi
 
+        #call Finalize method, if present
+        o.HasMethod "$obj" "Finalize"; local hasDestroyMethod="$_r"
+        if $hasDestroyMethod; then
+            o.Call "$obj" "Finalize" "$_destroyChildren"
+            if [ "$_error" != "" ]; then
+                _error="Could not call Destroy method of object '$obj': $_error"
+                return 1
+            fi
+        fi
+
+        #call OnDenFinalize method, if present
+        o.HasMethod "$obj" "OnFinalize"; local hasDestroyMethod="$_r"
+        if $hasDestroyMethod; then
+            o.Call "$obj" "OnFinalize" "$_destroyChildren"
+            if [ "$_error" != "" ]; then
+                _error="Could not call Destroy method of object '$obj': $_error"
+                return 1
+            fi
+        fi
+
         o.ListProps "$obj"; local props=("${_r[@]}")
         for prop in "${props[@]}"; do
             #if the property is an object, destroy it
@@ -509,7 +614,14 @@ SHU_MISC_LOADED=true
 
             o.Delete "$obj" "$prop"
         done
+
+        if $__o_SubshellRW; then
+            local fname="/dev/shm/shu_subshell_rw/$__o_SubShellRWId/$obj"
+            rm -f "$fname" 2>/dev/null
+        fi
     }
+
+    o.Finalize(){ o.Destroy "$@"; }
 
     o.IsObject(){ local obj="$1"
         if [ -z "$obj" ]; then
@@ -521,6 +633,17 @@ SHU_MISC_LOADED=true
         if [ ! -z "$_error" ]; then
             _error="Could not get final object name: $_error"
             return 1
+        fi
+
+        if $__o_SubshellRW; then
+            local fname="/dev/shm/shu_subshell_rw/$__o_SubShellRWId/$obj"
+            if [ -f "$fname" ]; then
+                _r=true
+                return 0
+            else
+                _r=false
+                return 1
+            fi
         fi
 
         declare -n var="$obj"
@@ -617,6 +740,9 @@ SHU_MISC_LOADED=true
             
             local destinationMethodName="$className.$method"
             if ! declare -F "$destinationMethodName" > /dev/null; then
+                if [ "$_error" != "" ]; then
+                    _error+=" + "
+                fi
                 _error+="method '$method' is missing in class '$className'"
             fi
         done
@@ -667,7 +793,7 @@ SHU_MISC_LOADED=true
                 return 1
             fi
 
-            o._deserializeProp "$obj" "$okey" "$value"
+            o.Set "$obj" "$okey" "$value"
             if [ ! -z "$_error" ]; then
                 _error="Could not deserialize key '$okey' in object '$obj': $_error"
                 return 1
@@ -680,7 +806,7 @@ SHU_MISC_LOADED=true
     }
     o.FromString(){ o.Deserialize "$@"; return $?; }
 
-    o._serialize(){ local obj="$1"; local serializer="$2"; local _parent="${3:-}"
+    o._serialize(){ local obj="$1"; local serializer="$2"; local _parent="${3:-}"; local _generateOutput=${4:-true}
 
         if [[ "$obj" == *.* ]]; then
             o.resolveFinalObjectAndKey "$obj" "InvalidKey"; local obj="$_r"; 
@@ -701,7 +827,7 @@ SHU_MISC_LOADED=true
         for prop in "${props[@]}"; do
             #if the property is an object, serialize it recursively
             if o.IsObject "$obj.$prop"; then
-                o._serialize "$obj.$prop" "$serializer" "$_parent$prop."
+                o._serialize "$obj.$prop" "$serializer" "$_parent$prop." false
             else
                 #set the property in the serializer
                 o.Get "$obj" "$prop"; local value="$_r"
@@ -714,6 +840,12 @@ SHU_MISC_LOADED=true
                 o.Call "$serializer.Set" "$_parent$prop" "$value"
             fi
         done
+
+        if [ "$_generateOutput" == false ]; then
+            _r=""
+            _error=""
+            return 0
+        fi
 
         o.Call "$serializer.Serialize"
         if [ ! -z "$_error" ]; then
@@ -735,35 +867,6 @@ SHU_MISC_LOADED=true
             newVarName="$value"
         done
     }; o.Copy(){ o.Clone "$@"; }
-
-    #ONKey comes from ObjectNotationKey
-    o._deserializeProp(){ local obj="$1"; local ONKey="$2"; local value="$3";
-        #ONKey can be like 'obj.key' or 'obj.other.key'
-        #if ONKey contains '.', then it is a nested key
-        if [[ "$ONKey" == *.* ]]; then
-            local objecKey="${ONKey%%.*}"
-            local remainKey="${ONKey#*.}"
-
-            if ! o.Has "$obj" "$objecKey"; then
-                o.New; local childObj="$_r"
-                o.Set "$obj" "$objecKey" "$childObj"
-            fi
-
-            o.Get "$obj" "$objecKey"; local childObj="$_r"
-
-            o._deserializeProp "$childObj" "$remainKey" "$value"
-            local retCode=$?
-            if [ "$_error" != "" ]; then
-                _error="Could not deserialize key '$ONKey' in object '$obj': $_error"
-                return 1
-            fi
-            return $?
-        else
-            #if ONKey does not contain '.', then it is a simple key
-            o.Set "$obj" "$ONKey" "$value"
-            return $?
-        fi
-    }
 #}
 
 #Common interfaces {
@@ -975,16 +1078,90 @@ SHU_MISC_LOADED=true
 #defined by tput cols, or 80 if tput is not available.
 #_print ($2) can be used to control if the line should be printed or not. The
 #default behavior is to print the line (_print = true).
-misc.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
+misc.CreateHorizontalLine(){ local _centralText="${1:-}"; local _char="${2:-"-"}"; local _print="${3:-true}"
     local _length=$(tput cols 2>/dev/null || echo 80)
     if [ -z "$_length" ] || [ "$_length" -le 0 ]; then
         _length=80
     fi
 
-    _r=$(printf "%${_length}s" | tr ' ' "$_char")
+    local result=$(printf "%${_length}s" | tr ' ' "$_char")
+
+    if [ -n "$_centralText" ]; then
+        local centralTextLength=${#_centralText}
+        if [ "$centralTextLength" -ge "$_length" ]; then
+            _centralText="${_centralText:0:_length}"
+            centralTextLength=$_length
+        fi
+
+        local sideLength=$(( (_length - centralTextLength) / 2 ))
+        local extraChar=""
+        if [ $(( (_length - centralTextLength) % 2 )) -ne 0 ]; then
+            extraChar="$_char"
+        fi
+
+        result="$(printf "%${sideLength}s" | tr ' ' "$_char")$_centralText$(printf "%${sideLength}s" | tr ' ' "$_char")$extraChar"
+    fi
+
+
+    _r="$result"
     if [ "$_print" == "true" ]; then
         printf "%s\n" "$_r"
     fi
+    return 0
+}
+
+#gets a argument by its name. The if function is not case-sensitive and allows three formats for the argument: --arg=value, --arg:value and --arg value.
+misc.GetArgByName(){ local argName="$1"; local defaultValue="$2"; shift 2
+    local argValue="$defaultValue"
+    local args=("$@")
+    local i
+
+    #convert argName to lower case for case-insensitive comparison
+    local argName=$(echo "$argName" | tr '[:upper:]' '[:lower:]')
+
+    for ((i=0; i<${#args[@]}; i++)); do
+        local arg="${args[$i]}"
+        local argLow=$(echo "$arg" | tr '[:upper:]' '[:lower:]')
+
+        if [[ "$argLow" == "$argName="* ]]; then
+            argValue="${arg#*=}"
+            break
+        elif [[ "$argLow" == "$argName:"* ]]; then
+            argValue="${arg#*:}"
+            break
+        elif [[ "$argLow" == "$argName" ]]; then
+            if [ $((i + 1)) -lt ${#args[@]} ]; then
+                argValue="${args[$((i + 1))]}"
+            fi
+            break
+        fi
+    done
+
+    _r="$argValue" 
+    return 0
+}
+
+#Find arg using multiple possible names. This is useful when you want to allow multiple names for the same argument, like --help and -h.
+#possibleNames is a list of possible names for the argument, separated by space. For example: "--help -h"
+#example: misc.FindArg "--help -h" "default value" "$@"
+misc.FindArg(){ local possibleNames="$1"; local defaultValue="$2"; shift 2
+    local argValue="$defaultValue"
+    local args=("$@")
+    local i
+
+    local originalIFS="$IFS"
+
+    IFS=' ' read -r -a possibleNamesArray <<< "$possibleNames"
+    for possibleName in "${possibleNamesArray[@]}"; do
+        misc.GetArgByName "$possibleName" "" "${args[@]}"
+        if [ -n "$_r" ]; then
+            argValue="$_r"
+            break
+        fi
+    done
+
+    _r="$argValue"
+    IFS="$originalIFS"
     return 0
 }
 
@@ -1127,8 +1304,10 @@ misc.CreateHorizontalLine(){ local _char="${1:-"-"}"; local _print="${2:-true}"
 #   # will set the properties 'file' of the object '$obj' (inside func 'myFunc') to the values 'value1', 'value2' and 'value3', respectively.
 #
 #       o.New; local obj="$_r";}
+# _r returns with amount of 'digested' arguments
 misc.ParseOptions(){
     local obj="$1"; shift
+    local digested=0
     while true; do
         local arg="${!i}"; ((i++))
         if [[ -z "$arg" ]]; then
@@ -1146,10 +1325,13 @@ misc.ParseOptions(){
                 #split the argument by ':' or '='
                 key="${arg%%:*}"; key="${key%%=*}"
                 value="${arg#*:}"; value="${value#*=}"
+                digested=$((digested + 1))
+
             else
                 #value is in the next agument
                 key="$arg"
                 value="${!i}"; ((i++))
+                digested=$((digested + 2))
             fi
 
             #replace '-' by '_' in key
@@ -1158,6 +1340,8 @@ misc.ParseOptions(){
             o.Set "$obj" "$key" "$value"
         fi
     done
+
+    _r=$digested
 }
 
 
@@ -1243,4 +1427,42 @@ misc.HookFunction(){ local funcName="$1"; local hookFunc="$2"; shift 2
     eval "$originalCode"
 
     eval "$funcName() { $hookFunc \"$newFuncName\" \"\$@\"; }"
+}
+
+#Load and cache a shellscript from a URL. If the file was already loaded and is not older than maxCacheAgeInDays, the cached version will be used.
+misc.SourceUrl(){ local url="$1"; local cacheFolder="${2:-./run/cache}"; local maxCacheAgeInDays="${3:-7}"
+    mkdir -p "$cacheFolder"
+    local onlyName="${url##*/}"
+    local cache_file="$cacheFolder/$onlyName_$(echo -n "$url" | md5sum | awk '{print $1}').sh"
+
+    if [ -f "$cache_file" ]; then
+        local modTime=$(stat -c %Y "$cache_file")
+        local currentTime=$(date +%s)
+        local ageInSeconds=$((currentTime - modTime))
+        local maxAgeInSeconds=$((maxCacheAgeInDays * 24 * 60 * 60))
+
+        if [ $ageInSeconds -lt $maxAgeInSeconds ]; then
+            source "$cache_file"
+            return 0
+        fi
+    fi
+    
+    rm -f "$cache_file"
+
+    local result=0
+    if command -v curl >/dev/null 2>&1; then
+        curl -sSfL "$url" -o "$cache_file"
+        result=$?
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q "$url" -O "$cache_file"
+        result=$?
+    fi
+    
+    if [[ $result -ne 0 ]]; then
+        echo "Error: cannot load SHU misc.sh. Please check your internet connection or source the file manually." >&2
+        return 1
+    fi
+
+    source "$cache_file"
+    return 0
 }
