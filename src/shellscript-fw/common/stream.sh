@@ -1,8 +1,6 @@
 #!/bin/bash
 
 #load companios library 'misc.sh' (It must have been charged by the user, but still tries)
-thisscriptdir="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
-source "$thisscriptdir/misc.sh"
 
 #Stream.Sh
 Stream.New(){
@@ -56,6 +54,7 @@ Stream.Post(){ local stream="$1"; shift
 }
 Stream.Publish(){ Stream.Post "$@"; }
 Stream.Write(){ Stream.Post "$@"; }
+Stream.Emit(){ Stream.Post "$@"; }
 
 Stream.GetLast(){ local stream="$1"
     o.Get "$stream.FirstDataAlreadySent"; local firstDataAlreadySent="$_r"
