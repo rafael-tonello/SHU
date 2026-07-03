@@ -18,50 +18,79 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
 #import mechanism {
     #looks for the filename and source it
     declare -A misc_loadedFiles=()
-    misc.import(){ local filename="$1"; local _ignoreIfAlreadyLoaded=${2:-true}; local _rootPath="${3:-$PWD}"
-        if [ "$_ignoreIfAlreadyLoaded" == true ] && [ "${misc_loadedFiles[$filename]}" == "loaded" ]; then
-            _error=""
-            return 0
-        fi
 
-        #list all files in current folder
-        local allFiles=("$_rootPath"/*)
-
+    misc__import_remain_files=()
+    #loads many import in one call (if you use misc.Import "file1.sh" "file2.sh" ..., the folders will be
+    #scrolled only once.)
+    misc._import(){
+        #last argument is the folder
+        local rootPath="$1"
+        
+        local allFiles=("$rootPath"/*)
         local subfolders=()
         for file in "${allFiles[@]}"; do
             local realPath="$(realpath "$file")"
             if [ -f "$file" ]; then
-                local relativePath="${realPath#$PWD/}"
+                #check if $file meets one argument
+                for filename in "${misc__import_remain_files[@]}"; do
+                    local relativePath="${realPath#$PWD/}"
+                    if [[ "$relativePath" == "$filename" ]] || [[ "$relativePath" == */"$filename" ]]; then
+                        if [ "${misc_loadedFiles[$filename]}" != "loaded" ]; then
+                            source "$realPath"
+                            _error=""
+                            _r="$realPath"
+                            misc_loadedFiles["$realPath"]="loaded"
+                        fi
+                        #remove the filename from the list of arguments
+                        misc__import_remain_files=("${misc__import_remain_files[@]/$filename}")
 
-                #checks if relaPath or relativePaht ends with $filename
-                if [[ "$relativePath" == "$filename" ]] || [[ "$relativePath" == */"$filename" ]]; then
-                    source "$realPath"
-                    _error=""
-                    _r="$realPath"
-                    misc_loadedFiles["$filename"]="loaded"
-                    return 0
-                fi
+                        #check if there are remains files to be imported, if not, return
+                        if [ "${#misc__import_remain_files[@]}" -eq 0 ]; then
+                            return 0
+                        fi
+
+                        break
+                    fi
+                done
+
             elif [ -d "$file" ]; then
-                #take advantage of the loop and bring up the folders.
-                #if file is not found in the current folder, it wil be searched in the subfolders
-                subfolders+=("$realPath")
+                subfolders+=("$file")
             fi
         done
 
         #if the file was not found in the current folder, search in the subfolders
         for folder in "${subfolders[@]}"; do
-            misc.import "$filename" $_ignoreIfAlreadyLoaded "$folder"
-            if [ $? -eq 0 ]; then
+            if [ "${#misc__import_remain_files[@]}" -eq 0 ]; then
                 return 0
             fi
+
+            misc._import "$folder"
         done
 
-        _error="File '$filename' not found in '$PWD' or any subfolder"
-        _r=""
-        return 1
+    }
+
+    #you can specify the root folder as first or last argument. The reamisn ones should be filenames
+    #misc.Import "file1" [ "file2" ] [...] [folder] - imports the files from the folder (or current folder if not informed)
+    #misc.Import [folder] "file1" [ "file2" ] [...] - imports the files from the folder (or current folder if not informed)
+    misc.Import(){
+        #check if last argument is a folder, if not, use current folder
+        local lastArg="${@: -1}"
+        if [ -d "$lastArg" ]; then
+            misc__import_remain_files=("${@:1:$(($#-1))}")
+            misc._import "$lastArg"
+        else
+            #check if first argument is a folder, if so, use it as root folder
+            if [ -d "$1" ]; then
+                misc__import_remain_files=("${@:2}")
+                misc._import "$1"
+            else
+                misc__import_remain_files=("$@")
+                misc._import "$PWD"
+            fi
+        fi
     };
-    misc.using() { misc.import "$@"; }
-    using () { misc.import "$@"; }
+    misc.Using() { misc.Import "$@"; }
+    Using () { misc.Import "$@"; }
 #}
 
 #basic object/stuct operations (allow basic OO oiperations in bash){
@@ -420,12 +449,12 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
             fi
         fi
 
-        #call OnDestory method, if present
+        #call OnDestroy method, if present
         o.HasMethod "$obj" "OnDestroy"; local hasDestroyMethod="$_r"
         if $hasDestroyMethod; then
             o.Call "$obj" "OnDestroy" "$_destroyChildren"
             if [ "$_error" != "" ]; then
-                _error="Could not call Destroy method of object '$obj': $_error"
+                _error="Could not call OnDestroy method of object '$obj': $_error"
                 return 1
             fi
         fi
@@ -435,7 +464,7 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
         if $hasDestroyMethod; then
             o.Call "$obj" "Finalize" "$_destroyChildren"
             if [ "$_error" != "" ]; then
-                _error="Could not call Destroy method of object '$obj': $_error"
+                _error="Could not call Finalize method of object '$obj': $_error"
                 return 1
             fi
         fi
@@ -445,7 +474,27 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
         if $hasDestroyMethod; then
             o.Call "$obj" "OnFinalize" "$_destroyChildren"
             if [ "$_error" != "" ]; then
-                _error="Could not call Destroy method of object '$obj': $_error"
+                _error="Could not call OnFinalize method of object '$obj': $_error"
+                return 1
+            fi
+        fi
+
+        #call Finalize method, if present
+        o.HasMethod "$obj" "Release"; local hasDestroyMethod="$_r"
+        if $hasDestroyMethod; then
+            o.Call "$obj" "Release" "$_destroyChildren"
+            if [ "$_error" != "" ]; then
+                _error="Could not call Release method of object '$obj': $_error"
+                return 1
+            fi
+        fi
+
+        #call OnDenFinalize method, if present
+        o.HasMethod "$obj" "OnRelease"; local hasDestroyMethod="$_r"
+        if $hasDestroyMethod; then
+            o.Call "$obj" "OnRelease" "$_destroyChildren"
+            if [ "$_error" != "" ]; then
+                _error="Could not call OnRelease method of object '$obj': $_error"
                 return 1
             fi
         fi
@@ -467,8 +516,9 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
             rm -f "$fname" 2>/dev/null
         fi
     }
-
-    o.Finalize(){ o.Destroy "$@"; }
+    o.Release(){ o.Destroy "$@"; }
+    #o.Finalize(){ o.Destroy "$@"; }
+    #o.Free(){ o.Destroy "$@"; }
 
     o.IsObject(){ local obj="$1"
         if [ -z "$obj" ]; then
@@ -515,8 +565,6 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
         local retCode=$?; 
         local obj="$_r";
         local method="$_r_key"
-
-
 
         shift $shiftNum
 
