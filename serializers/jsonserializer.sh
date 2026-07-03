@@ -16,40 +16,63 @@ JsonSerializer.New(){
 }
 
 JsonSerializer.Set(){ local ser="$1"; local kkey="$2"; local value="$3"
+    if [ "$kkey" == "" ]; then
+        _error="Kkey cannot be empty"
+        return 1
+    fi
+
+    o.Get "$ser.map.$kkey"
+    if [ "$_r" != "" ]; then
+        #kkey already exists, update value
+        o.Set "$ser.item_$_r""_value" "$value"
+        _error=""
+        return 0
+    fi
+
     o.Get "$ser.count"; local count="$_r"
     o.Set "$ser.count" $((count + 1))
     o.Set "$ser" "item_$count""_kkey" "$kkey"
     o.Set "$ser" "item_$count""_value" "$value"
+    o.Set "$ser.map.$kkey" "$count"
     _error=""
     return 0
 }
 
 JsonSerializer.Get(){ local ser="$1"; local kkey="$2"
-    o.Get "$ser.count"; local count="$_r"
-    for ((i=0; i<count; i++)); do
-        o.Get "$ser.item_$i""_kkey"; local itemKkey="$_r"
-        if [[ "$itemKkey" == "$kkey" ]]; then
-            o.Get "$ser.item_$i""_value"; _r="$_r"
-            _error=""
-            return 0
-        fi
-    done
+    o.Get "$ser.map.$kkey"
+
+    if [ "$_r" == "" ]; then
+        _r=""
+        _error="Kkey not found: $kkey"
+        return 1
+    fi
+
+    if [ "$_r" != "" ]; then
+        o.Get "$ser.item_$_r""_value"
+        _error=""
+        
+        return 0
+    fi
+    _r=""
     _error="Kkey not found: $kkey"
     return 1
 }
 
 JsonSerializer.List(){ local ser="$1"
     o.Get "$ser.count"; local count="$_r"
+
     local kkeys=()
     for ((i=0; i<count; i++)); do
         o.Get "$ser.item_$i""_kkey"; kkeys+=("$_r")
     done
+
     _r=("${kkeys[@]}")
     _error=""
     return 0
 }
 
 JsonSerializer.Serialize(){ local ser="$1"
+
     #serialie using jq (object notation)
     JsonSerializer.List "$ser"; local kkeys=("${_r[@]}")
     

@@ -1,7 +1,6 @@
 #!/bin/bash
 #misc is basically a stdlib for shu.
 
-
 #prevent double sourcing (and double parsing)
 thisScriptLocation="$(realpath "${BASH_SOURCE[0]}")"
 
@@ -13,218 +12,56 @@ if [ "$SHU_MISC_LOADED" == "true" ]; then
 fi
 SHU_MISC_LOADED=true
 
-#import mechanism to import scripts from packages {
-    #Looks for scripts in ./shu/packages/[packageName]/[scriptName].sh and sources them.
-    #scripts should be infomed in the format '<packageName>/<scriptName>'
-    #you can inform scripts inside folders in the package, like '<packageName>/<folderName>/<scriptName>'
-    #if only <packageName> all scripts in the package will be imported
-    #
-    #you can informe absolute paths like '/opt/shu/packages/<packageName>/<scriptName>.sh'
-    #
-    #Examples:
-    #   misc.Import "myPackage" -> imports all scripts in the root of package 'myPackage' (include s all scripts in subfolders - but not .shu and .shu subfolders)
-    #   misc.Import "myPackage/myScript.sh" -> imports the script 'myScript.sh' in the package 'myPackage'
-    #   misc.Import "/opt/shu/packages/myPackage/myScript.sh" -> imports the script 'myScript.sh' in the package 'myPackage' in the path '/opt/shu/packages'
-    #   misc.Import "myPackage1" "myPackage2" -> imports all scripts in the root of packages 'myPackage1' and 'myPackage2'
-    #   misc.Import "myPackage1/myScript1.sh" "myPackage2/myScript2.sh" -> imports the scripts 'myScript1.sh' in the package 'myPackage1' and 'myScript2.sh' in the package 'myPackage2'
-    #   misc.Import "myPackage1" "myPackage2/myScript2.sh" -> imports all scripts in the package 'myPackage1' and the script 'myScript2.sh' in the package 'myPackage2'
-    #   misc.Import "myPackage1/**" -> imports all scripts in the package 'myPackage1' and all its subfolders (but not .shu and its subfolders)
-    #   misc.Import "myPackage1/***" -> imports all scripts in the package 'myPackage1' and all its subfolders (including .shu and its subfolders)
-    #   misc.Import "mySubpackage/file.sh --allow-subpackages" -> imports the file 'file.sh' in the subpackage 'mySubpackage' and all its subfolders (including .shu and its subfolders)
-    misc.Import(){
-        local callerScriptPath=$(dirname "${BASH_SOURCE[1]}")
-        
-        if [ "$#" -lt 1 ]; then
-            _error="packageName was not informed"
-            return 1
-        fi
+#when a method that is being called by o.Call is not found, with SUPRESS_O_CALL_FROM_STACK_TRACING=true the 'o.Call' will be removed from stack trace, as it is not relevant for the error and just adds noise to the stack trace. If you want to print o.Call in the stack trace for some rason, just set SUPRESS_O_CALL_FROM_STACK_TRACING=false
+SUPRESS_O_CALL_FROM_STACK_TRACING=true
 
-        #start search starting from the directory of the script that called this function. It allow the packages to find files int its own .shu folders
-        misc.getShuProjectRoot "$(dirname "$(realpath "${BASH_SOURCE[1]}")")"; local shuProjectFolder="$_r"
-
-        if [ "$_error" != "" ]; then
-            _error="Could not find .shu folder: $_error"
-            misc.PrintError "$_error"
-            return 1
-        fi
-
-        local allowSubPackages=false
-        if [[ "$1" == *"--allow-subpackages"* ]] || [[ "$1" == *"-asp"* ]]; then
-            allowSubPackages=true
-            #remove the --allow-subpackages or -asp from the arguments
-            set -- "${@/--allow-subpackages/}"
-            set -- "${@/-asp/}"
-        fi
-
-        filePaths=();
-        for arg in "${@}"; do
-            #if arg begins with '-', skip
-            if [[ "$arg" == -* ]]; then
-                continue;
-            fi
-
-            #if arg ends with .sh
-            if [[ "$arg" == *.sh ]]; then
-                #just import the file
-                if [ -f "$shuProjectFolder/.shu/$arg" ]; then
-                    filePaths+=("$shuProjectFolder/.shu/$arg")
-                elif [ -f "$(pwd)/$arg" ]; then
-                    filePaths+=("$(pwd)/$arg")
-                else
-                    local found=false;
-                    if allowSubPackages; then
-                        misc.import.tryFindInSubPackages "$filePath"; filePath="$_r"
-                        if [ "$_error" == "" ]; then
-                            found=true;
-                            filePaths+=("$filePath")
-                        fi
-                    fi
-
-                    if ! $found; then
-                        #fullpath? file will be verified later
-                        if [[ "$arg" != *.sh ]]; then
-                            arg="$arg.sh"
-                        fi
-
-                        filePaths+=("$arg")
-                    fi
-                fi
-
-            #else, if args ends with /***/ or ends with /** and allowSubPackages is true (/** and allowSubPackages is true is same of ends with /***)
-            elif [[ "$arg" == */*** ]] || [[ "$arg" == */**  && "$allowSubPackages" == "true" ]]; then
-                #recursive import scripts (including .shu folders)
-                misc.findFiles "$shuProjectFolder/.shu/packages/$arg" true false
-                if [ "$_error" != "" ]; then
-                    _error="Could not find package '$arg': $_error"
-                    misc.PrintError "$_error"
-                    return 1
-                fi
-
-                filePaths+=("${_r[@]}")
-
-            #else, if args ends with /**
-            elif [[ "$arg" == */** ]]; then
-                arg="${arg%/***}"
-                #recursive import scripts (ignore .shu folders)
-                misc.findFiles "$shuProjectFolder/.shu/packages/$arg" true true
-                if [ "$_error" != "" ]; then
-                    _error="Could not find package '$arg': $_error"
-                    misc.PrintError "$_error"
-                    return 1
-                fi
-
-                filePaths+=("${_r[@]}")
-            
-            
-            
-            else
-                #import all scripts in the root of informed folder
-                
-                misc.findFiles "$shuProjectFolder/.shu/packages/$arg" false false
-                if [ "$_error" != "" ]; then
-                    _error="Could not find package '$arg': $_error"
-                    misc.PrintError "$_error"
-                    return 1
-                fi
-
-                filePaths+=("${_r[@]}")
-            fi
-        done
-
-        #source all files in the filePaths array
-        for filePath in "${filePaths[@]}"; do
-            #if the filePath does not start with a slash, add the .shu folder path
-            if [[ "$filePath" != /* ]]; then
-                filePath="$shuProjectFolder/.shu/packages/$filePath"
-            fi
-
-            #if the file exists, source it
-            if [ -f "$filePath" ]; then
-                export SHU_IS_IMPORTING=true
-                source "$filePath" "shuiissourcing"
-                export SHU_IS_IMPORTING=false
-            else
-                #if --alow-subpackages or -asp is set
-                # if [[ "$filePath" == *"--allow-subpackages"* ]] || [[ "$filePath" == *"-asp"* ]]; then
-                #     #do not print error, just skip
-                #     misc.import.tryFindInSubPackages "$filePath"; local retCode=$?; filePath="$_r"
-                #     if [ "$retCode" -ne 0 ]; then
-                #         _error="Could not find file '$filePath' in subpackages: $_error"
-                #         misc.PrintError "$_error"
-                #         return 1
-                #     fi
-
-                #     export SHU_IS_IMPORTING=true
-                #     source "$filePath" "shuiissourcing"
-                #     export SHU_IS_IMPORTING=false
-                # fi
-                _error="File $filePath does not exist"
-                #check if file path contains '.shu'
-                if [[ "$filePath" == *".shu"* ]]; then
-                    _error="file $filePath does not exist. Did you run 'shu restore' after cloning the project?"
-                else
-                    _error="file $filePath was not found"
-                fi
-
-                misc.PrintError "$_error"
-                return 1
-            fi
-        done
-    }
-    Import(){ misc.Import "$@"; }
-    import(){ misc.Import "$@"; }
-
-    misc.getShuProjectRoot(){ local startSearchLocation="$1"
-
-        local shuLocation="$startSearchLocation"
-        while [ ! -d "$shuLocation/.shu" ] && [ "$shuLocation" != "/" ]; do
-            shuLocation="$(dirname "$shuLocation")"
-        done
-
-        if [ ! -d "$shuLocation/.shu" ]; then
-            _error="Could not find .shu folder in the current directory or any parent directory"
-            return 1
-        fi
-
-        _r="$shuLocation"
-        return 0
-    }
-
-    misc.findFiles(){ local path="$1"; local recursive="${2:-false}"; local ignoreShuFolders="${3:-true}"
-        if [ ! -d "$path" ]; then
-            _error="Path '$path' is not a directory"
-            return 1
-        fi
-
-        local files=()
-        #get all files in the folder
-        for item in "$path"/*; do
-            #check if is a file and if it is a script
-            if [ -f "$item" ] && [[ "$item" == *.sh ]]; then
-                files+=("$(realpath "$item")")
-            #check if is a folder (but not .shu)
-            elif [ -d "$item" ] && [[ "$(basename "$item")" != ".shu" ]] || [ "$ignoreShuFolders" == false ]; then
-                #if is a folder, call the function recursively
-                misc.findFiles "$item" "$recursive" "$ignoreShuFolders"; local subFiles=("${_r[@]}")
-                files+=("${subFiles[@]}")
-            fi
-        done
-
-        _r=("${files[@]}")
-        return 0
-    }
-
-    misc.isShuImporting(){
-        _r=$SHU_IS_IMPORTING
-        #check if the variable SHU_IS_IMPORTING is set and true
-        if [ "$SHU_IS_IMPORTING" == "true" ]; then
+#import mechanism {
+    #looks for the filename and source it
+    declare -A misc_loadedFiles=()
+    misc.import(){ local filename="$1"; local _ignoreIfAlreadyLoaded=${2:-true}; local _rootPath="${3:-$PWD}"
+        if [ "$_ignoreIfAlreadyLoaded" == true ] && [ "${misc_loadedFiles[$filename]}" == "loaded" ]; then
+            _error=""
             return 0
-        else
-            return 1
         fi
-    }
-    shu.isImporting(){ misc.isShuImporting; return $?; }
-    isShuImporting(){ misc.isShuImporting; return $?; }
+
+        #list all files in current folder
+        local allFiles=("$_rootPath"/*)
+
+        local subfolders=()
+        for file in "${allFiles[@]}"; do
+            local realPath="$(realpath "$file")"
+            if [ -f "$file" ]; then
+                local relativePath="${realPath#$PWD/}"
+
+                #checks if relaPath or relativePaht ends with $filename
+                if [[ "$relativePath" == "$filename" ]] || [[ "$relativePath" == */"$filename" ]]; then
+                    source "$realPath"
+                    _error=""
+                    _r="$realPath"
+                    misc_loadedFiles["$filename"]="loaded"
+                    return 0
+                fi
+            elif [ -d "$file" ]; then
+                #take advantage of the loop and bring up the folders.
+                #if file is not found in the current folder, it wil be searched in the subfolders
+                subfolders+=("$realPath")
+            fi
+        done
+
+        #if the file was not found in the current folder, search in the subfolders
+        for folder in "${subfolders[@]}"; do
+            misc.import "$filename" $_ignoreIfAlreadyLoaded "$folder"
+            if [ $? -eq 0 ]; then
+                return 0
+            fi
+        done
+
+        _error="File '$filename' not found in '$PWD' or any subfolder"
+        _r=""
+        return 1
+    };
+    misc.using() { misc.import "$@"; }
+    using () { misc.import "$@"; }
 #}
 
 #basic object/stuct operations (allow basic OO oiperations in bash){
@@ -573,6 +410,16 @@ SHU_MISC_LOADED=true
             fi
         fi
 
+        #destroy methos used specifically by classes created by o.NewAnon function
+        o.HasMethod "$obj" "__Anonimous_Destroy"; local hasADestroyMethod="$_r"
+        if $hasADestroyMethod; then
+            o.Call "$obj" "__Anonimous_Destroy" "$_destroyChildren"
+            if [ "$_error" != "" ]; then
+                _error="Could not call __Anonimous_Destroy method of object '$obj': $_error"
+                return 1
+            fi
+        fi
+
         #call OnDestory method, if present
         o.HasMethod "$obj" "OnDestroy"; local hasDestroyMethod="$_r"
         if $hasDestroyMethod; then
@@ -674,37 +521,126 @@ SHU_MISC_LOADED=true
         shift $shiftNum
 
         if [ "$retCode" -ne 0 ]; then
-            _error="Could not get final object name: $_error"
+            local tmpError="error calling "$obj.$method": could  not get final object name: $_error"
+            misc.StackTraceToString '_f(){ local fName="$1"; local file="$2"; local line="$3"
+                if [[ "$fName" != "o.Call" || "$SUPRESS_O_CALL_FROM_STACK_TRACING" == "false" ]]; then
+                    _r=true
+                else
+                    _r=false
+                fi
+
+            }; _f'
+            #the double ':' make the printError function prints one ':' after the 'Call stack' text
+            _error="$tmpError. Call stack:: $_r"
+            misc.PrintError "$_error"
             return 1
         fi
 
         if [ -z "$obj" ] || [ -z "$method" ]; then
-            _error="Object or method was not informed"
+            local tmpError="error calling "$obj.$method": object or method was not informed"
+            misc.StackTraceToString '_f(){ local fName="$1"; local file="$2"; local line="$3"
+                if [[ "$fName" != "o.Call" || "$SUPRESS_O_CALL_FROM_STACK_TRACING" == "false" ]]; then
+                    _r=true
+                else
+                    _r=false
+                fi
+
+            }; _f'
+            #the double ':' make the printError function prints one ':' after the 'Call stack' text
+            _error="$tmpError. Call stack:: $_r"
+            misc.PrintError "$_error"
             return 1
         fi
 
         o.IsObject "$obj"
         if [ ! -z "$_error" ]; then
-            _error="Object '$obj' is not a valid object"
+            local tmpError="error calling "$obj.$method": object '$obj' is not a valid object"
+            misc.StackTraceToString '_f(){ local fName="$1"; local file="$2"; local line="$3"
+                if [[ "$fName" != "o.Call" || "$SUPRESS_O_CALL_FROM_STACK_TRACING" == "false" ]]; then
+                    _r=true
+                else
+                    _r=false
+                fi
+
+            }; _f'
+            #the double ':' make the printError function prints one ':' after the 'Call stack' text
+            _error="$tmpError. Call stack:: $_r"
+            misc.PrintError "$_error"
             return 1
         fi
 
         o.Get "$obj" "ClassName"; local className="$_r"
-        if [ ! -z "$_error" ]; then
-            _error="This is an anonymous object. Could not get class name of object '$obj': $_error"
+        if [ ! -z "$_error" ] || [ -z "$className" ]; then
+            local tmpError="error calling "$obj.$method": error calling object '$obj' function"
+
+            if [ ! -z "$_error" ]; then
+                tmpError+=": $_error"
+            #a more detailed error if $className is empty
+            elif [ -z "$className" ]; then
+                tmpError+=": object has no class name"
+
+                #check if $obj begins with 'obj_' (it is the default prefix for objects created with o.New function)
+                if [[ "$obj" != obj_* ]]; then
+                    tmpError+=". Did you forget a '$' before the object name?"
+                fi
+            fi
+
+
+            misc.StackTraceToString '_f(){ local fName="$1"; local file="$2"; local line="$3"
+                if [[ "$fName" != "o.Call" || "$SUPRESS_O_CALL_FROM_STACK_TRACING" == "false" ]]; then
+                    _r=true
+                else
+                    _r=false
+                fi
+
+            }; _f'
+            #the double ':' make the printError function prints one ':' after the 'Call stack' text
+            _error="$tmpError. Call stack:: $_r"
+
+            misc.PrintError "$_error"
             return 1
         fi
 
         local finalMethodName="$className.$method"
 
+        #check if the method exists in the class
+        if ! declare -F "$finalMethodName" > /dev/null; then
+            #the double ':' make the printError function prints one ':' after the 'Call stack' text
+            local tmpError="error calling "$obj.$method": method '$method' does not exist in class '$className'. Call stack:: "
+            #print call stack
+
+            misc.StackTraceToString '_f(){ local fName="$1"; local file="$2"; local line="$3"
+                if [[ "$fName" != "o.Call" || "$SUPRESS_O_CALL_FROM_STACK_TRACING" == "false" ]]; then
+                    _r=true
+                else
+                    _r=false
+                fi
+
+            }; _f'
+            
+            _error+="$tmpError$_r"
+
+            #this is a high level error, an should be printed with stack trace, even with _error return
+            misc.PrintError "$_error"
+            return 1
+        fi
+
         $finalMethodName "$obj" "$@"
         return $?
     }
 
-    o.Implements(){ local objOrClassName="$1"; local interface="$2"
-        _r=false
-        if [ -z "$objOrClassName" ] || [ -z "$interface" ]; then
+    #check if object/struct or class implements the interfaces
+    #interfaces are informed as arguments after the object name, and can be more than one
+    #Ex.: 
+    #   o.Implements "obj" "Interface1" "Interface2"
+    #   if !_r; then
+    #       misc.PrintError "Object does not implement the interfaces: $_error"
+    #   fi
+    o.Implements(){ local objOrClassName="$1"; shift
+        local interfaces=("$@")
+        if [ -z "$objOrClassName" ] || [ ${#interfaces[@]} -eq 0 ]; then
             _error="Object or interface was not informed"
+            _r=false
             return 1
         fi
 
@@ -712,6 +648,7 @@ SHU_MISC_LOADED=true
             o.resolveFinalObjectAndKey "$objOrClassName" "InvalidKey"; local objOrClassName="$_r"
             if [ ! -z "$_error" ]; then
                 _error="Could not get final object name: $_error"
+                _r=false
                 return 1
             fi
         fi
@@ -725,37 +662,79 @@ SHU_MISC_LOADED=true
             o.Get "$objOrClassName" "ClassName"; className="$_r"
             if [ ! -z "$_error" ]; then
                 _error="This is an anonymous object. Could not get class name of object '$objOrClassName': $_error"
+                _r=false
                 return 1
             fi
         fi
 
-        #list all methods of the interface (functions started with $interface.)
-        local interfaceMethods=$(declare -F | grep "^declare -f $interface\." | awk '{print $3}')
-        
-        #check if the object has the interface methods
+        local missingInterfaces=""
         _error=""
-        for method in $interfaceMethods; do
-            #remove the class name from the method name
-            method="${method#"$interface."}"
-            
-            local destinationMethodName="$className.$method"
-            if ! declare -F "$destinationMethodName" > /dev/null; then
+        for interface in "${interfaces[@]}"; do
+
+            #list all methods of the interface (functions started with $interface.)
+            local interfaceMethods=$(declare -F | grep "^declare -f $interface\." | awk '{print $3}')
+
+            if [ -z "$interfaceMethods" ]; then
                 if [ "$_error" != "" ]; then
                     _error+=" + "
                 fi
-                _error+="method '$method' is missing in class '$className'"
+                _error="Interface '$interface' does not have any methods or does not exist"
+
+                #check if missingInterfaces already contains the interface name
+                if [[ "$missingInterfaces" != *"$interface"* ]]; then
+                    if [ -n "$missingInterfaces" ]; then
+                        missingInterfaces+=", "
+                    fi
+                    missingInterfaces+="$interface"
+                fi
             fi
+        
+            #check if the object has the interface methods
+            for method in $interfaceMethods; do
+                #remove the class name from the method name
+                method="${method#"$interface."}"
+                
+                local destinationMethodName="$className.$method"
+                if ! declare -F "$destinationMethodName" > /dev/null; then
+                    if [ "$_error" != "" ]; then
+                        _error+=" + "
+                    fi
+
+                    #check if is multiple interface
+                    if [ ${#interfaces[@]} -gt 1 ]; then
+                        _error+="'$method' (interface '$interface') is missing in class '$className'"
+                    else
+                        _error+="method '$method' is missing in class '$className'"
+                    fi
+
+                    #check if missingInterfaces already contains the interface name
+                    if [[ "$missingInterfaces" != *"$interface"* ]]; then
+                        if [ -n "$missingInterfaces" ]; then
+                            missingInterfaces+=", "
+                        fi
+                        missingInterfaces+="$interface"
+                    fi
+                fi
+            done
+
         done
 
         if [ "$_error" != "" ]; then
-            _error="class '$className' does not implement interface '$interface': $_error"
+            if [ ${#interfaces[@]} -gt 1 ]; then
+                _error="class/struct '$className' does not implement interfaces '$missingInterfaces': $_error"
+            else
+                _error="class/struct '$className' does not implement interface '$missingInterfaces': $_error"
+            fi
+            _r=false
             return 1
         fi
 
         _r=true
         _error=""
+        
         return 0
     }
+    o.DoesImplement(){ o.Implements "$@"; return $?; }
 
     o.Serialize(){ local obj="$1"; local serializer="$2"
         o.Implements "$serializer" "ISerializer"
@@ -867,6 +846,66 @@ SHU_MISC_LOADED=true
             newVarName="$value"
         done
     }; o.Copy(){ o.Clone "$@"; }
+
+    #create an anonimous object, whose methods are received via arguments of 'newI'
+    #arguments are strigns with bash function declarations
+    #
+    #it works by creating a random named class. When object is destroyed, the class is also destroyed.
+    #
+    #example:
+    #   o.NewAnon \
+    #       "Method1(){ echo Method1; }" \
+    #       "Method2(){ echo Method2; }" \
+    #       "Finalize(){ echo Finalize; }"instead
+
+    #   obj="$_r" 
+    #   o.Call "$obj" "Method1"
+    #   o.Call "$obj" "Method2" 
+    #   o.Destroy "$obj"
+
+    __misc_anonymousClassCount=0
+    o.NewAnon(){ 
+        #get all interface methods
+        local className="AnonimousClass_$RANDOM_$(( __misc_anonymousClassCount++ ))"
+
+        for method in "$@"; do
+
+            #evaluate the method implementation and create a function with the name of the class and method
+            eval "$className.$method"
+        done
+
+        eval ''$className'.__Anonimous_Destroy() { 
+            #list all methods of the class
+            local bashFunctions=$(declare -F | grep "^declare -f '$className'\." | awk "{print \$3}")
+            for method in $bashFunctions; do
+                #remove the class name from the method name
+                local methodName="${method#"'$className'."}"
+                #unset the method
+                unset -f "'$className'.$methodName"
+            done
+        }'
+
+        o.New "$className"; local obj="$_r"
+    }
+    o.NewAnonymous(){ o.NewAnon "$@"; }
+    o.NewA(){ o.NewAnon "$@"; }
+
+    #Declare a interface. Instead you write a interface like this:
+    #   IInterface.Method1(){ _error="Not implemented"; return 1; }
+    #   IInterface.Method2(){ _error="Not implemented"; return 1; }
+    #you can write:
+    #   o.DeclareInterface IInterface Method1 Method2
+    #
+    #You can call this function multiple times to declare more methods in the same interface, but you cant declare the same method twice.
+    o.DeclareInterface(){ 
+        local interfaceName="$1"
+        shift 1
+
+        for method in "$@"; do
+            #evaluate the method declaration and create a function with the name of the interface and method that returns "Not implemented"
+            eval "$interfaceName.$method() { _error=\"Not implemented\"; return 1; }"
+        done    
+    }
 #}
 
 #Common interfaces {
@@ -1012,7 +1051,7 @@ SHU_MISC_LOADED=true
         #_r should return with true if run successfully, false if error
         #_error should contain the error message if any
         #return 0 if run successfully, 1 if error
-        IWorker.WorkStep(){ _error="Not implemented"; return 1; }
+        IWorkable.WorkStep(){ _error="Not implemented"; return 1; }
     #}
 
     #IWorker is a class of works that can run by themselves, like a thread.
@@ -1141,10 +1180,12 @@ misc.GetArgByName(){ local argName="$1"; local defaultValue="$2"; shift 2
     return 0
 }
 
+
 #Find arg using multiple possible names. This is useful when you want to allow multiple names for the same argument, like --help and -h.
 #possibleNames is a list of possible names for the argument, separated by space. For example: "--help -h"
 #example: misc.FindArg "--help -h" "default value" "$@"
 misc.FindArg(){ local possibleNames="$1"; local defaultValue="$2"; shift 2
+
     local argValue="$defaultValue"
     local args=("$@")
     local i
@@ -1164,6 +1205,88 @@ misc.FindArg(){ local possibleNames="$1"; local defaultValue="$2"; shift 2
     IFS="$originalIFS"
     return 0
 }
+
+#identify the lines in the txt and add the prefix in each line
+misc.IndentLines(){ local indentText="$1"; local text="$2"
+    local indentedText=""
+    while IFS= read -r line; do
+        indentedText+="$indentText$line"$'\n'
+    done <<< "$text"
+
+    _r="$indentedText"
+    return 0
+}
+
+misc.GetOnly(){ local input="$1"; local _validChars="${2:-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_}"
+    local result=""
+    local i
+    for ((i=0; i<${#input}; i++)); do
+        local char="${input:$i:1}"
+        if [[ "$_validChars" == *"$char"* ]]; then
+            result+="$char"
+        fi
+    done
+    _r="$result"
+}
+
+#misc.stackTraceToString itself is not printed
+misc.StackTraceToString(){ local _souldPrintItCallback="${1:-"_f(){ _r=true; }; _f"}";
+    local i=0
+    local callStack=""
+    local printedCount=0
+    while caller $i > /dev/null; do
+        local callerInfo="$(caller $i)"
+
+        local lineNumber="$(echo "$callerInfo" | awk '{print $1}')"
+        local fileName="$(echo "$callerInfo" | awk '{print $3}')"
+        local functionName="$(echo "$callerInfo" | awk '{print $2}')"
+        callerInfo="$functionName() in $fileName:$lineNumber"
+
+        eval "$_souldPrintItCallback \"$functionName\" \"$fileName\" \"$lineNumber\""; local shouldPrintIt="$_r"
+
+        if [ "$shouldPrintIt" != "true" ]; then
+            ((i++))
+            continue
+        fi
+
+        if [[ "$printedCount" -eq 0 ]]; then
+            callStack+="(most recent) ";
+        else
+            callStack+="+ called by ";
+        fi
+        ((printedCount++))
+
+        callStack+="\"$callerInfo\""
+
+        ((i++))
+    done
+
+    _r="$callStack" 
+    
+}
+
+
+#evaluate arguments and prints the stack trace if any error occurs (returns != 0 or _error != "")
+misc.Call(){
+    _error=""
+    eval "$@"; local retCode="$?"
+    if [[ "$retCode" -ne 0 || -n "$_error" ]]; then
+        local func="$@"
+        #func="${func:0:100}..."
+
+        local tmpError="error calling (return code $retCode) '$func'"
+        if [ "$_error" != "" ]; then
+            tmpError+=": $_error"
+        fi
+        misc.StackTraceToString
+        misc.PrintError "$tmpError. Call stack:: $_r"
+        _error="$tmpError"
+    fi
+    
+    return $retCode
+}
+Call(){ misc.Call "$@"; return $?; }
+misc.Eval(){ misc.Call "$@"; return $?; }
 
 #printing messages and errors {
     misc.PrintGreen(){ local message="$1"; local keepOpened="${2:-}"
@@ -1241,13 +1364,14 @@ misc.FindArg(){ local possibleNames="$1"; local defaultValue="$2"; shift 2
         local currError=""
 
         if [[ "$error" == *": "* ]]; then
+            #currError="${error%%: *}:"
             currError="${error%%: *}"
             error="${error#*: }"
         else
             currError="$error"
             error=""
         fi
-        misc.PrintError.printSameLevelError "$currError" "$_currIdentation  " "$_currPrefix_"
+        misc.PrintError.printSameLevelError "$currError" "$_currIdentation" "$_currPrefix_"
         if [[ -n "$error" ]]; then
             #change prefix of next errors to ': '
             misc.PrintError "$error" "$_currIdentation  " "⤷ "
