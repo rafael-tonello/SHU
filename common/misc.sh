@@ -1344,8 +1344,22 @@ misc.Eval(){ misc.Call "$@"; return $?; }
         fi
     }
 
+    misc.PrintBrightGreen(){ local message="$1"; local keepOpened="${2:-}"
+        printf "\033[0;92m$message"
+        if [ "$keepOpened" != "true" ]; then
+            printf "\033[0m"
+        fi
+    }
+
     misc.PrintRed(){ local message="$1"; local keepOpened="${2:-}"
         printf "\033[0;31m$message"
+        if [ "$keepOpened" != "true" ]; then
+            printf "\033[0m"
+        fi
+    }
+
+    misc.PrintBrightRed(){ local message="$1"; local keepOpened="${2:-}"
+        printf "\033[0;91m$message"
         if [ "$keepOpened" != "true" ]; then
             printf "\033[0m"
         fi
@@ -1358,8 +1372,22 @@ misc.Eval(){ misc.Call "$@"; return $?; }
         fi
     }
 
+    misc.PrintBrightYellow(){ local message="$1"; local keepOpened="${2:-}"
+        printf "\033[0;93m$message"
+        if [ "$keepOpened" != "true" ]; then
+            printf "\033[0m"
+        fi
+    }
+
     misc.PrintBlue(){ local message="$1"; local keepOpened="${2:-}"
         printf "\033[0;34m$message"
+        if [ "$keepOpened" != "true" ]; then
+            printf "\033[0m"
+        fi
+    }
+
+    misc.PrintBrightBlue(){ local message="$1"; local keepOpened="${2:-}"
+        printf "\033[0;94m$message"
         if [ "$keepOpened" != "true" ]; then
             printf "\033[0m"
         fi
@@ -1372,6 +1400,13 @@ misc.Eval(){ misc.Call "$@"; return $?; }
         fi
     }
 
+    misc.PrintBrightCyan(){ local message="$1"; local keepOpened="${2:-}"
+        printf "\033[0;96m$message"
+        if [ "$keepOpened" != "true" ]; then
+            printf "\033[0m"
+        fi
+    }
+
     misc.PrintMagenta(){ local message="$1"; local keepOpened="${2:-}"
         printf "\033[0;35m$message"
         if [ "$keepOpened" != "true" ]; then
@@ -1379,8 +1414,22 @@ misc.Eval(){ misc.Call "$@"; return $?; }
         fi
     }
 
+    misc.PrintBrightMagenta(){ local message="$1"; local keepOpened="${2:-}"
+        printf "\033[0;95m$message"
+        if [ "$keepOpened" != "true" ]; then
+            printf "\033[0m"
+        fi
+    }
+
     misc.PrintGray(){ local message="$1"; local keepOpened="${2:-}"
         printf "\033[0;90m$message"
+        if [ "$keepOpened" != "true" ]; then
+            printf "\033[0m"
+        fi
+    }
+
+    misc.PrintBrightGray(){ local message="$1"; local keepOpened="${2:-}"
+        printf "\033[0;37m$message"
         if [ "$keepOpened" != "true" ]; then
             printf "\033[0m"
         fi

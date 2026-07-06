@@ -533,6 +533,17 @@ Tests._findAndTestFiles(){ local _curFolder="${1:-.}"
             local tmpSuccess=$(cat /tmp/SHU_TESTS_success 2>/dev/null)
             local retCode=$(cat /tmp/SHU_TESTS_RETCODE 2>/dev/null)
 
+            #if no tests were run (detected, using this library), uses the retcode
+            if [ "$tmpFailures" == "" ] && [ "$tmpSuccess" == "" ]; then
+                tmpFailures=0
+                tmpSuccess=0
+                if [ "$retCode" -eq 0 ]; then
+                    tmpSuccess=1
+                else
+                    tmpFailures=1
+                fi
+            fi
+
             cd "$returnTo"
 
             Tests_suecessCount=$((Tests_suecessCount + tmpSuccess))
@@ -549,7 +560,8 @@ Tests._findAndTestFiles(){ local _curFolder="${1:-.}"
 
         local lastFolderName=$(basename "$1")
 
-        misc.CreateHorizontalLine " Result for tests in folder '$lastFolderName' "
+        misc.CreateHorizontalLine "[ Result for tests in folder '$lastFolderName' ]" "=" false
+        misc.PrintBrightCyan "$_r"
         Tests.PrintSummary "Tests summary for folder '$lastFolderName':"
         return $?
     }
