@@ -6,6 +6,7 @@
 #   o.Call "$helpObj.Add" "start" "<service-name>" "Starts the specified service."
 #   o.Call "$helpObj.Add" "stop" "<service-name>" "Stops the specified service."
 #   o.Call "$helpObj.Print" "$helpObj"
+#   o.Release "$helpObj" true
 
 # Initializes a new help object with title, indentation size, usage tip, and command prefix
 # Parameters:
@@ -14,37 +15,56 @@
 #   usageTip: Usage tip text (default: "Usage: $0 <command> [args...]"
 #   commandSessionPrefix: Prefix for listing available commands
 # Returns: Help object with configuration
+
+if [ "$SHU_MISC_LOADED" != "true" ]; then
+    #red message
+    printf "\033[31mError: This library requires the 'misc.sh' library to be loaded first. Please load it before loading this library.\033[0m\n"
+
+    #return if sources
+    if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+        return 1
+    fi
+    exit 1
+fi
+
 Help.New(){
     local title=$1;
-    local identSize=${2:-"20"};
-    local usageTip=${3:-"Usage: $0 <command> [args...]"};
-    local commandSessionPrefix=${4:-"Available commands:"};
+    local usageTip=${2:-"  Usage: $0 <command> [args...]"};
+    local defaultIdentSize=${3:-"20"};
+    local addEmptyLines=${4:-"false"};
+
     o.New Help; local ret=$_r
     o.Set "$ret.title" "$title"
     o.Set "$ret.usageTip" "$usageTip"
-    o.Set "$ret.identSize" "$identSize"
-    o.Set "$ret.commandSessionPrefix" "$commandSessionPrefix"
+    o.Set "$ret.defaultIdentSize" "$defaultIdentSize"
+ 
+    o.Set "$ret.addEmptyLines" "$addEmptyLines"
+ 
+    o.Set "$ret.sessions.count" 0
 
-    o.Set "$ret.itemCount" 0
+    
 
     _r="$ret"
 }
 
-# Adds an entry to the help object
-# Parameters:
-#   help: Help object to modify
-#   cmd: Command name
-#   args: Argument description
-#   text: Help text for the command
-# Appends a new item to the help object's command list
-Help.Add(){
- local help=$1; local cmd=$2; local args=$3; local text=$4;
-    o.Get "$help.itemCount"; local itemCount=$_r
+#return session id
+Help.AddSession(){
+    local help=$1;
+    local title=$2;
+    local identSize=${3:-""};
 
-    o.Set "$help.$itemCount.cmd" "$cmd"
-    o.Set "$help.$itemCount.helpArgs" "$args"
-    o.Set "$help.$itemCount.helpText" "$text"
-    o.Set "$help.itemCount" $(( itemCount + 1 ))
+    if [ -z "$identSize" ]; then
+        o.Get "$help.defaultIdentSize"; local identSize=$_r
+    fi
+    
+    helpSession.New "$help" "$title" "$identSize"; local session="$_r"
+
+    o.Get "$help.sessions.count"; local sessionCount=$_r
+    o.Set "$help.sessions.$sessionCount" "$session"
+    o.Set "$help.sessions.count" $((sessionCount + 1))
+
+    _r="$session"
+    return 0
 }
 
 # Prints the formatted help information
@@ -53,11 +73,16 @@ Help.Add(){
 # Formats and displays the help text with appropriate indentation and wrapping
 # Handles terminal width detection and text wrapping
 Help.Print(){
-  local help=$1
-    o.Get "$help.identSize"; local identSize=$_r
+    local help=$1
     o.Get "$help.title"; local title=$_r
     o.Get "$help.usageTip"; local usageTip=$_r
-    o.Get "$help.commandSessionPrefix"; local commandSessionPrefix=$_r
+    o.Get "$help.sessions.count"; local sessionCount=$_r
+    o.Get "$help.addEmptyLines"; local addEmptyLines=$_r
+
+    echo "$title"
+    if [ "$addEmptyLines" == "true" ]; then echo "";  fi
+    echo "$usageTip"
+    if [ "$addEmptyLines" == "true" ]; then echo "";  fi
 
     local terminalWidth=$(tput cols)
     if [ $terminalWidth -gt 120 ]; then
@@ -67,88 +92,151 @@ Help.Print(){
             terminalWidth=100
         fi
     fi
+    
+    o.Get "$help.sessions.count"; local sessionCount=$_r
 
-
-    echo "$title"
-    echo ""
-    echo "$usageTip"
-    echo ""
-    echo "$commandSessionPrefix"
-
-    o.Get "$help.itemCount"; local itemCount=$_r
-
-    for (( i=0; i<itemCount; i++ )); do
-        o.Get "$help.$i.cmd"; local cmd="$_r"
-        o.Get "$help.$i.helpArgs"; local helpArgs="$_r"
-        o.Get "$help.$i.helpText"; local helpText="$_r"
-
-        local boldCmd="\033[1m$cmd\033[0m"
-        local italicHelpArgs="\033[3m$helpArgs\033[0m"
-
-        local header="$boldCmd $italicHelpArgs"
-        local headerNoFormat="$cmd $helpArgs"
-
-        local totalHeaderSize=$(( ${#headerNoFormat} + 1 ))
-        local identText="$(printf "%*s" "$((identSize + 3))" " ")"
-
-        if [ "$totalHeaderSize" -lt $identSize ]; then
-            helpText="$(printf "  %-${identSize}s" "$header ") $helpText"
-        else
-            printf "  $header\n"
-        fi
-
-        #spit by '\n' string (not the char) to get idividual lines
-        
-        local linesArr=()
-        while true; do
-            if [[ "$helpText" == *"\n"* ]]; then
-                linesArr+=("${helpText%%\\n*}")
-                helpText="${helpText#*\\n}"
-            else
-                linesArr+=("$helpText")
-                break
-            fi
-        done
-
-
-        for line in "${linesArr[@]}"; do
-            #check if line is not the header
-            if [[ "$line" != *"$header"* ]]; then
-                line="$identText$line"
-            fi
-
-            while true; do
-                #break only on space or end of line, to avoid cutting words
-                local cutPosition=$terminalWidth
-                while true; do
-                    charAtCutPos=$(echo "$line" | cut -c$cutPosition)
-                    if [ "$charAtCutPos" == " " ] || [ "$charAtCutPos" == "" ]; then
-                        break;
-                    fi
-                    cutPosition=$((cutPosition - 1))
-                done
-
-                toPrint=$(echo "$line" | cut -c1-$cutPosition)
-                line="${line:$cutPosition}"
-                #trim start
-                line="${line#"${line%%[![:space:]]*}"}"
-
-                printf "$toPrint\n"
-
-                if [ -z "$line" ]; then
-                    break
-                fi
-
-                line="$identText $line"
-            done
-        done
-            
-        #if [ ! -z "${!helpVar}" ]; then
-        #    printf "  %-20s %s\n\n" "$cmd ${!helpArgsVar}" "${!helpVar}"
-        #fi
-
-        echo ""
+    local i
+    for (( i=0; i<sessionCount; i++ )); do
+        o.Get "$help.sessions.$i"; local session="$_r"
+        o.Call "$session.Print" "$terminalWidth" "$addEmptyLines"
     done
-    echo ""
+    if [ "$addEmptyLines" == "true" ]; then echo "";  fi
 }
 #}
+
+
+helpSession.New(){ local helpObj=$1; local title=$2; local identSize=${3:-"20"}; 
+    o.Implements "$helpObj" "Help";
+    if [ "$_error" != "" ]; then
+        _error="invalid Help object: $_error"
+        _r=""
+        return 1
+    fi
+
+    o.New helpSession; local ret="$_r"
+    o.Set "$ret.title" "$title"
+    o.Set "$ret.identSize" "$identSize"
+    o.Set "$ret.items.count" 0
+    o.Set "$ret.controller" "$helpObj"
+
+    _error=""
+    _r="$ret"
+    return 0
+}
+
+# Adds an entry to the help object
+# Parameters:
+#   help: Help object to modify
+#   cmd: Command name
+#   args: Argument description
+#   text: Help text for the command
+# Appends a new item to the help object's command list
+helpSession.AddItem(){ local session=$1; local cmd=$2; local args=$3; local text=$4;
+    o.Get "$session.items.count"; local itemCount=$_r
+    o.Set "$session.items.$itemCount.cmd" "$cmd"
+    o.Set "$session.items.$itemCount.helpArgs" "$args"
+    o.Set "$session.items.$itemCount.helpText" "$text"
+    o.Set "$session.items.count" $(( itemCount + 1 ))
+}
+
+helpSession.Print(){ local session=$1; local terminalWidth=$2; local addEmptyLines=$3
+    o.Get "$session.title"; local title=$_r
+    o.Get "$session.identSize"; local identSize=$_r
+    o.Get "$session.items.count"; local itemCount=$_r
+
+    if [ "$title" != "" ]; then
+        echo "$title"
+        if [ "$addEmptyLines" == "true" ]; then echo "";  fi
+    fi
+
+    local i
+
+    for (( i=0; i<itemCount; i++ )); do
+        o.Get "$session.items.$i.ClassName"; local className="$_r"
+        o.Call "$session.printHelpItem" "$session.items.$i" "$terminalWidth" "$identSize" "$addEmptyLines"
+    done
+}
+
+helpSession.printHelpItem(){ local session=$1; local item=$2; local terminalWidth=$3; local identSize=$4; local addEmptyLines=$5
+    o.Get "$session.items.$i.cmd"; local cmd="$_r"
+    o.Get "$session.items.$i.helpArgs"; local helpArgs="$_r"
+    o.Get "$session.items.$i.helpText"; local helpText="$_r"
+
+
+    local boldCmd="\033[1m$cmd\033[0m"
+    local italicHelpArgs="\033[3m$helpArgs\033[0m"
+
+    local header="$boldCmd $italicHelpArgs"
+    local headerNoFormat="$cmd $helpArgs"
+
+    local totalHeaderSize=$(( ${#headerNoFormat} + 1 ))
+    local identText="$(printf "%*s" "$((identSize + 2))" " ")"
+
+    if [ $totalHeaderSize -lt $identSize ]; then
+        local sizeWithTextModifiers=$(( identSize  + ${#header} - ${#headerNoFormat} ))
+        helpText="$(printf "  %-$sizeWithTextModifiers""s" "$header ") $helpText"
+    else
+        printf "  $header\n"
+        helpText="$identText $helpText"
+    fi
+
+    #spit by '\n' string (not the char) to get idividual lines
+    
+    local linesArr=()
+    while true; do
+        if [[ "$helpText" == *"\n"* ]]; then
+            linesArr+=("${helpText%%\\n*}")
+            helpText="${helpText#*\\n}"
+        else
+            linesArr+=("$helpText")
+            break
+        fi
+    done
+
+    local line
+    for line in "${linesArr[@]}"; do
+        local tmpTerminalWidth=$terminalWidth
+        if [[ "$line" == "  $header"* ]]; then
+            #increase $terminal width to comport text style chars(\033[1m, \033[0m, etc) in the header
+            local sizeWithTextModifiers=$(( ${#line} + ${#header} - ${#headerNoFormat} ))
+            tmpTerminalWidth=$((terminalWidth + ${#header} - ${#headerNoFormat} ))
+        fi
+        
+        while true; do
+            #break only on space or end of line, to avoid cutting words
+            local cutPosition=$tmpTerminalWidth
+            while true; do
+                local charAtCutPos=$(echo "$line" | cut -c$cutPosition)
+                if [ "$charAtCutPos" == " " ] || [ "$charAtCutPos" == "" ]; then
+                    break;
+                fi
+                cutPosition=$((cutPosition - 1))
+            done
+
+            if [ $cutPosition -le $(( identSize + 10)) ]; then
+                cutPosition=$terminalWidth
+            fi
+
+            if [ $cutPosition -gt $terminalWidth ]; then
+                cutPosition=$terminalWidth
+            fi
+
+            local toPrint=$(echo "$line" | cut -c1-$cutPosition)
+            line="${line:$cutPosition}"
+
+            #trim start
+            line="${line#"${line%%[![:space:]]*}"}"
+
+            printf "$toPrint\n"
+            
+            if [ -z "$line" ]; then
+                break
+            fi
+
+            line="$identText   $line"
+        done
+    done
+
+    if [ "$addEmptyLines" == "true" ]; then echo "";  fi
+}
+
