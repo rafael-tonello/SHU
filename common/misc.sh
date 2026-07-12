@@ -511,10 +511,17 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
             o.Delete "$obj" "$prop"
         done
 
+        #erase the object itself
+        declare -n var="$obj"
+        unset var
+
         if $__o_SubshellRW; then
             local fname="/dev/shm/shu_subshell_rw/$__o_SubShellRWId/$obj"
             rm -f "$fname" 2>/dev/null
         fi
+        _r=""
+        _error=""
+        return 0
     }
     o.Release(){ o.Destroy "$@"; }
     #o.Finalize(){ o.Destroy "$@"; }
