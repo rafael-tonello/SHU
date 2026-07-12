@@ -187,6 +187,7 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
                     _error="Object '$currObjectName' does not have a child object '$childName' and creating objects is not allowed"
                     return 1
                 fi
+
                 o.New; childObj="$_r"
                 o.Set "$currObjectName" "$childName" "$childObj"
                 o_resolveFinalObjectAndKey_allow_creating=true
@@ -240,7 +241,12 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
             return 0
         fi
 
-        declare -n var="$obj""_""$okey"
+        declare -n var="$obj""_""$okey" >/dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            _r=false
+            return 1
+        fi
+        
 
         #if there more than one argument
         if [ "$#" -gt 1 ]; then
@@ -283,7 +289,11 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
             return 0
         fi
 
-        declare -n var="$obj""_""$okey"
+        declare -n var="$obj""_""$okey" >/dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            _r=""
+            return 1
+        fi
 
         if [ ! -n "$var" ]; then
             _r=""
@@ -319,7 +329,12 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
             fi
         fi
 
-        declare -n var="$obj""_""$okey"
+        declare -n var="$obj""_""$okey" >/dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            _r=false
+            return 1
+        fi
+
         if [ -n "$var" ]; then
             _r=true
             return 0
@@ -374,6 +389,12 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
         fi
 
         declare -n var="$obj""_""$okey"
+        if [ $? -ne 0 ]; then
+            _r=false
+            return 1
+        fi
+        
+        var=""
         unset var
         _r=true
         return 0
@@ -500,11 +521,14 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
         fi
 
         o.ListProps "$obj"; local props=("${_r[@]}")
+        local prop
         for prop in "${props[@]}"; do
+            o.Get "$obj" "$prop"; local propValue="$_r"
             #if the property is an object, destroy it
             if [ "$_destroyChildren" == "true" ]; then
-                if o.IsObject "$prop"; then
-                    o.Destroy "$prop" true
+                o.Get "$obj" "$prop"; local propValue="$_r"
+                if o.IsObject "$propValue"; then
+                    o.Destroy "$propValue" true
                 fi
             fi
 
@@ -513,7 +537,9 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
 
         #erase the object itself
         declare -n var="$obj"
-        unset var
+        if [ $? -eq 0 ]; then
+            unset var
+        fi
 
         if $__o_SubshellRW; then
             local fname="/dev/shm/shu_subshell_rw/$__o_SubShellRWId/$obj"
@@ -550,7 +576,12 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
             fi
         fi
 
-        declare -n var="$obj"
+        declare -n var="$obj" >/dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            _r=false
+            return 1
+        fi
+
         if [ -n "$var" ]; then
             _r=true
             return 0
