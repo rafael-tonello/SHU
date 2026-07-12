@@ -445,6 +445,15 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
     }
 
     o.Destroy(){ local obj="$1"; local _destroyChildren="${2:-false}"
+        #check if obj is already being destroyed (to avoid loops with circular references)
+        o.Get "$obj" "__destroying"; local vara="$_r"
+        if [ $? -eq 0 ]; then
+            if [ "$vara" == "__destroying__" ]; then
+                #circular reference detected, skip this object to avoid infinite loop
+                return 1
+            fi
+        fi
+
         if [ -z "$obj" ]; then
             _error="Object was not informed"
             return 1
@@ -520,10 +529,18 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
             fi
         fi
 
+        #use a special value to avoid loops with circular references
+        o.Set "$obj" "__destroying" "__destroying__"
+
         o.ListProps "$obj"; local props=("${_r[@]}")
         local prop
         for prop in "${props[@]}"; do
             o.Get "$obj" "$prop"; local propValue="$_r"
+            if [ "$prop" == "__destroying" ]; then
+                #circular reference detected, skip this property to avoid infinite loop
+                continue
+            fi
+
             #if the property is an object, destroy it
             if [ "$_destroyChildren" == "true" ]; then
                 o.Get "$obj" "$prop"; local propValue="$_r"
@@ -535,7 +552,8 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
             o.Delete "$obj" "$prop"
         done
 
-        #erase the object itself
+        o.Delete "$obj" "__destroying"
+        
         declare -n var="$obj"
         if [ $? -eq 0 ]; then
             unset var
