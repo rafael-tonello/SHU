@@ -84,16 +84,21 @@ Help.Print(){
     echo "$usageTip"
     if [ "$addEmptyLines" == "true" ]; then echo "";  fi
 
-    local terminalWidth=$(tput cols)
-    if [ $terminalWidth -gt 120 ]; then
+    local terminalWidth="${COLUMNS:-}"
+    if [ -z "$terminalWidth" ] || [ "$terminalWidth" -le 0 ] 2>/dev/null; then
+        terminalWidth=$(tput cols 2> /dev/null)
+    fi
+    if [ -z "$terminalWidth" ] || [ "$terminalWidth" -le 0 ] 2>/dev/null; then
+        terminalWidth=100
+    fi
+
+    if [ "$terminalWidth" -gt 120 ]; then
         #try via stty size, if fails, set to 120
         terminalWidth=$(stty size 2> /dev/null | awk '{print $2}')
         if [ -z "$terminalWidth" ]; then
             terminalWidth=100
         fi
     fi
-    
-    o.Get "$help.sessions.count"; local sessionCount=$_r
 
     local i
     for (( i=0; i<sessionCount; i++ )); do
@@ -152,15 +157,92 @@ helpSession.Print(){ local session=$1; local terminalWidth=$2; local addEmptyLin
     local i
 
     for (( i=0; i<itemCount; i++ )); do
-        o.Get "$session.items.$i.ClassName"; local className="$_r"
         o.Call "$session.printHelpItem" "$session.items.$i" "$terminalWidth" "$identSize" "$addEmptyLines"
     done
 }
 
 helpSession.printHelpItem(){ local session=$1; local item=$2; local terminalWidth=$3; local identSize=$4; local addEmptyLines=$5
-    o.Get "$session.items.$i.cmd"; local cmd="$_r"
-    o.Get "$session.items.$i.helpArgs"; local helpArgs="$_r"
-    o.Get "$session.items.$i.helpText"; local helpText="$_r"
+
+    o.Get "$item.cmd"; local cmd="$_r"
+    o.Get "$item.helpArgs"; local helpArgs="$_r"
+    o.Get "$item.helpText"; local helpText="$_r"
+
+
+    local boldCmd="\033[1m$cmd\033[0m"
+    local italicHelpArgs="\033[3m$helpArgs\033[0m"
+
+    local identText
+    printf -v identText "%*s" "$((identSize))" ""
+
+    printf "  $boldCmd $italicHelpArgs"
+    local lastPrinted="$cmd $helpArgs"
+    local col=${#lastPrinted}
+    if [ $col -ge $identSize ]; then
+        printf "\n"
+        col=0
+    else 
+        #print space until identSize
+        while [ $col -lt $identSize ]; do
+            printf " "
+            col=$((col + 1))
+        done
+    fi
+    while true; do
+        if [ "$col" -le 0 ]; then
+            printf "$identText  "
+            col=$identSize
+        fi
+
+        local availableSpace=$(( terminalWidth - col -2 ));
+
+        #cut 'availableSapce' chars from helpText
+        local toPrint="${helpText:0:$availableSpace}"
+        helpText="${helpText:$availableSpace}"
+
+
+        #get last space in toPrint
+
+        if [ "$helpText" != "" ]; then
+
+            lastPart="${toPrint##* }"
+
+            local lastSpacePos=$(( ${#toPrint} - ${#lastPart} ))
+
+            if [ "$lastPart" == "$toPrint" ] || [ "$lastSpacePos" -le "5" ]; then
+                #accept cutting word if no space found
+                lastSpacePos=$((availableSpace -2 ))
+            fi
+
+            if [ "$lastSpacePos" -gt 0 ]; then
+                #if last space is not at the end of toPrint, put the text after last space back to helpText
+                helpText="${toPrint:$lastSpacePos}$helpText"
+
+                #remove the text after last space from toPrint
+                toPrint="${toPrint:0:$lastSpacePos}"
+            fi
+        fi
+
+        #print string
+        printf "%s\n" "$toPrint"
+        col=0
+
+        if [ -z "$helpText" ]; then
+            break
+        fi
+        helpText="  $helpText"
+    done
+
+
+
+
+    
+
+}
+
+old(){
+    o.Get "$item.cmd"; local cmd="$_r"
+    o.Get "$item.helpArgs"; local helpArgs="$_r"
+    o.Get "$item.helpText"; local helpText="$_r"
 
 
     local boldCmd="\033[1m$cmd\033[0m"
@@ -170,11 +252,12 @@ helpSession.printHelpItem(){ local session=$1; local item=$2; local terminalWidt
     local headerNoFormat="$cmd $helpArgs"
 
     local totalHeaderSize=$(( ${#headerNoFormat} + 1 ))
-    local identText="$(printf "%*s" "$((identSize + 2))" " ")"
+    local identText
+    printf -v identText "%*s" "$((identSize + 2))" ""
 
     if [ $totalHeaderSize -lt $identSize ]; then
         local sizeWithTextModifiers=$(( identSize  + ${#header} - ${#headerNoFormat} ))
-        helpText="$(printf "  %-$sizeWithTextModifiers""s" "$header ") $helpText"
+        printf -v helpText "  %-${sizeWithTextModifiers}s %s" "$header" "$helpText"
     else
         printf "  $header\n"
         helpText="$identText $helpText"
@@ -198,7 +281,6 @@ helpSession.printHelpItem(){ local session=$1; local item=$2; local terminalWidt
         local tmpTerminalWidth=$terminalWidth
         if [[ "$line" == "  $header"* ]]; then
             #increase $terminal width to comport text style chars(\033[1m, \033[0m, etc) in the header
-            local sizeWithTextModifiers=$(( ${#line} + ${#header} - ${#headerNoFormat} ))
             tmpTerminalWidth=$((terminalWidth + ${#header} - ${#headerNoFormat} ))
         fi
         
@@ -206,7 +288,7 @@ helpSession.printHelpItem(){ local session=$1; local item=$2; local terminalWidt
             #break only on space or end of line, to avoid cutting words
             local cutPosition=$tmpTerminalWidth
             while true; do
-                local charAtCutPos=$(echo "$line" | cut -c$cutPosition)
+                local charAtCutPos="${line:$((cutPosition - 1)):1}"
                 if [ "$charAtCutPos" == " " ] || [ "$charAtCutPos" == "" ]; then
                     break;
                 fi
@@ -221,7 +303,7 @@ helpSession.printHelpItem(){ local session=$1; local item=$2; local terminalWidt
                 cutPosition=$terminalWidth
             fi
 
-            local toPrint=$(echo "$line" | cut -c1-$cutPosition)
+            local toPrint="${line:0:$cutPosition}"
             line="${line:$cutPosition}"
 
             #trim start
