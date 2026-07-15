@@ -115,6 +115,7 @@ SUPRESS_O_CALL_FROM_STACK_TRACING=true
         eval "$tmp=obj"
         if [ ! -z "$_className" ]; then
             o.Set "$tmp" "ClassName" "$_className"
+            o.Set "$tmp" "Type" "$_className"
         fi
 
         if $__o_SubshellRW; then
@@ -1500,6 +1501,13 @@ misc.Eval(){ misc.Call "$@"; return $?; }
 
     misc.PrintItalic(){ local message="$1"; local keepOpened="${2:-}"
         printf "\033[3m$message"
+        if [ "$keepOpened" != "true" ]; then
+            printf "\033[0m"
+        fi
+    }
+
+    misc.PrintUnderline(){ local message="$1"; local keepOpened="${2:-}"
+        printf "\033[4m$message"
         if [ "$keepOpened" != "true" ]; then
             printf "\033[0m"
         fi
