@@ -1339,7 +1339,7 @@ misc.FindArg(){ local possibleNames="$1"; local defaultValue="$2"; shift 2
 
     local argValue="$defaultValue"
     local retCode=1
-    local _error="argument not found"
+    _error="argument not found"
     local args=("$@")
     local i
 
