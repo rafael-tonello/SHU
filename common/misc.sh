@@ -1359,6 +1359,18 @@ misc.FindArg(){ local possibleNames="$1"; local defaultValue="$2"; shift 2
     _r="$argValue"
     IFS="$originalIFS"
     return $retCode
+};
+
+#returns _r with true and 0 if any of the possible names is found in the arguments, or false and 1 if not found. _error will be set with an error message if not found.
+misc.HasFlag(){ local possibleNames="$1"; shift 1
+    misc.FindArg "$possibleNames" "" "$@"
+    if [ "$_error" == "" ]; then
+        _r=true
+        return 0
+    else
+        _r=false
+        return 1
+    fi
 }
 
 #identify the lines in the txt and add the prefix in each line
