@@ -1255,9 +1255,26 @@ misc.CreateHorizontalLine(){ local _centralText="${1:-}"; local _char="${2:-"-"}
 }
 
 #gets a argument by its name. The if function is not case-sensitive and allows three formats for the argument: --arg=value, --arg:value and --arg value.
+#
+# Example:
+#   misc.GetArgByName "--arg" "default value" "$@"
+#
+#   ./myscript.sh --arg=value
+#
+# this can also be used to check flags (if argument not found, the function explicity sets _error with an error):
+# 
+# Note: important!!. if you expect only flags, the _r will may be set with name of other flag or argument, it is normal and happens because two things happens: 1) Get argument finds the flag/argument, 2) GetAArgByName will consider the next argument as the value. But when checking flags, you can just ignore the _r return.
+#   misc.GetArgByName "--flag" "" "$@"
+#   if [ "$_error" != "" ]; then
+#       misc.PrintError "$_error"
+#   else
+#       misc.PrintGreen "Flag found: $_r"
+#   fi
 misc.GetArgByName(){ local argName="$1"; local defaultValue="$2"; shift 2
     local argValue="$defaultValue"
     local args=("$@")
+    local retCode=1
+    _error="argument not found"
     local i
 
     #convert argName to lower case for case-insensitive comparison
@@ -1269,29 +1286,60 @@ misc.GetArgByName(){ local argName="$1"; local defaultValue="$2"; shift 2
 
         if [[ "$argLow" == "$argName="* ]]; then
             argValue="${arg#*=}"
+            _error=""
+            retCode=0
             break
         elif [[ "$argLow" == "$argName:"* ]]; then
             argValue="${arg#*:}"
+            _error=""
+            retCode=0
             break
         elif [[ "$argLow" == "$argName" ]]; then
             if [ $((i + 1)) -lt ${#args[@]} ]; then
                 argValue="${args[$((i + 1))]}"
             fi
+            #if no value is provided, the default value is returned, but no errors is returned, meaning
+            # the argument was found, but no value was provided. This tipically happens with flags
+            _error=""
+            retCode=0
             break
         fi
     done
 
     _r="$argValue" 
-    return 0
+    return $retCode
 }
 
 
 #Find arg using multiple possible names. This is useful when you want to allow multiple names for the same argument, like --help and -h.
 #possibleNames is a list of possible names for the argument, separated by space. For example: "--help -h"
 #example: misc.FindArg "--help -h" "default value" "$@"
+#
+# Example:
+#   misc.FindArg "--test -t" "default value" "$@"
+#   if [ "$_error" != "" ]; then
+#       misc.PrintError "$_error"
+#   else
+#       misc.PrintGreen "Argument found: $_r"
+#   fi
+#   ...
+#   myscript.sh --test=value
+#
+#
+# You can also check for flags using this function, like:
+#   misc.FindArg "--flag1 -f1 --flag2 -f2" ""
+#   if [ "$_error" != "" ]; then
+#       misc.PrintError "$_error"
+#   else
+#       misc.PrintGreen "Flag found: $_r"
+#   fi
+#
+# Note: internally, the function GetArgByName is used, and checking for flags leads to the same behavior as described in GetArgByName, where _r may be set with the name of another flag or argument, but it is normal and can be ignored when checking for flags.
 misc.FindArg(){ local possibleNames="$1"; local defaultValue="$2"; shift 2
 
     local argValue="$defaultValue"
+    local retCode=1
+    local _error="argument not found"
     local args=("$@")
     local i
 
@@ -1299,16 +1347,18 @@ misc.FindArg(){ local possibleNames="$1"; local defaultValue="$2"; shift 2
 
     IFS=' ' read -r -a possibleNamesArray <<< "$possibleNames"
     for possibleName in "${possibleNamesArray[@]}"; do
-        misc.GetArgByName "$possibleName" "" "${args[@]}"
-        if [ -n "$_r" ]; then
+        misc.GetArgByName "$possibleName" "$defaultValue" "${args[@]}"
+        if [ "$_error" == "" ]; then
             argValue="$_r"
+            _error=""
+            retCode=0
             break
         fi
     done
 
     _r="$argValue"
     IFS="$originalIFS"
-    return 0
+    return $retCode
 }
 
 #identify the lines in the txt and add the prefix in each line
@@ -1571,6 +1621,15 @@ misc.Eval(){ misc.Call "$@"; return $?; }
 #   myFunc(){
 #       o.New; local obj="$_r";
 #       misc.parseOptions $obj "$@"
+#
+#       o.Get "$obj.p1"; local p1="$_r"
+#       o.Get "$obj.p2"; local p2="$_r"
+#       o.Get "$obj.p3"; local p3="$_r"
+#
+#       echo "p1: $p1"
+#       echo "p2: $p2"
+#       echo "p3: $p3"
+#       
 #   }
 #   myFunc --p1=value1 --p2:value2 --p3 value3
 #   # will set the properties 'p1', 'p2' and 'p3' of the object '$obj' (inside func 'myFunc') to the values 'value1', 'value2' and 'value3', respectively.
@@ -1579,6 +1638,8 @@ misc.Eval(){ misc.Call "$@"; return $?; }
 #   myFunc(){
 #       o.New; local obj="$_r";
 #       misc.parseOptions $obj --with-p1=value1 --with-p2:value2 --with-p3 value3
+#       
+#       o.Get "$obj.file"; local file="$_r"
 #   }
 # 
 #   withFile(){
@@ -1628,7 +1689,6 @@ misc.ParseOptions(){
 
     _r=$digested
 }
-
 
 shu.RunCommandAndInterceptStdout() {
     local command="$1"
